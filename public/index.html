@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Safety Inspection Admin | SML/HSE</title>
+  <meta name="description" content="Admin panel for managing the Sathosa Motors safety inspection questionnaire and records.">
+  <link rel="stylesheet" href="styles.css">
+  <!-- Favicon inline emoji -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪜</text></svg>">
+</head>
+<body>
+
+  <!-- ══════════════════════ LOGIN ══════════════════════ -->
+  <main id="loginView" class="login-view hidden">
+    <form id="loginForm" class="login-panel">
+      <div class="login-logo">🪜</div>
+      <h1>Inspection Admin</h1>
+      <p>Sathosa Motors · HSE Safety System</p>
+      <div class="form-field">
+        <label for="password">Admin Password</label>
+        <input id="password" type="password" autocomplete="current-password" required placeholder="Enter admin password">
+      </div>
+      <button type="submit" class="btn-primary" style="width:100%;justify-content:center;padding:12px 20px;font-size:0.95rem;">
+        Sign In
+      </button>
+      <p id="loginError" style="color:var(--fail);font-size:0.85rem;margin-top:10px;min-height:18px;font-weight:600;"></p>
+    </form>
+  </main>
+
+  <!-- ══════════════════════ APP ══════════════════════ -->
+  <div id="appView" class="app-view hidden">
+
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="topbar-brand">
+        <div class="topbar-icon">🪜</div>
+        <div>
+          <h1>Safety Inspection Admin</h1>
+          <div class="sub">Sathosa Motors · SML/HSE/CL/10</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <button id="logoutBtn" type="button" class="btn-secondary btn-sm" style="color:#94a3b8;border-color:rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);">
+          Sign Out
+        </button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="tabs">
+      <button class="tab active" data-tab="questions">📋 Questions</button>
+      <button class="tab" data-tab="preview">👁 Preview</button>
+      <button class="tab" data-tab="excel">📊 Excel</button>
+      <button class="tab" data-tab="records">🗂 Records</button>
+    </nav>
+
+    <!-- ── QUESTIONS TAB ── -->
+    <section id="questionsTab" class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Questionnaire Management</h2>
+          <p id="questionCount">Loading questions…</p>
+        </div>
+        <div class="panel-head-actions">
+          <button id="newQuestionBtn" type="button" class="btn-primary">+ Add Question</button>
+        </div>
+      </div>
+
+      <div class="split">
+        <!-- Question Table -->
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Section</th>
+                <th>Question</th>
+                <th>Type</th>
+                <th>Req</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="questionRows">
+              <tr><td colspan="7" style="padding:32px;text-align:center;color:var(--text-3);">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Question Editor -->
+        <form id="questionForm" class="editor" novalidate>
+          <h3 id="editorTitle">➕ Add Question</h3>
+
+          <input type="hidden" id="questionId">
+
+          <div class="form-field">
+            <label for="questionText">Question Text *</label>
+            <textarea id="questionText" rows="3" required placeholder="Enter the inspection question…"></textarea>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-field">
+              <label for="category">Section</label>
+              <select id="category">
+                <option value="general">🔧 General</option>
+                <option value="extension">🔄 Extension</option>
+                <option value="step">🪜 Step</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="questionType">Question Type</label>
+              <select id="questionType">
+                <option value="decision">Decision (PASS/FAIL/N/A)</option>
+                <option value="yes_no">Yes / No</option>
+                <option value="multiple_choice">Multiple Choice</option>
+                <option value="text">Short Text</option>
+                <option value="long_text">Long Text</option>
+                <option value="number">Number</option>
+                <option value="date">Date</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label for="sortOrder">Sort Order</label>
+            <input id="sortOrder" type="number" min="1" step="1" required>
+          </div>
+
+          <div class="divider"></div>
+
+          <div style="display:flex;gap:16px;margin-bottom:14px;">
+            <label class="checkbox-row">
+              <input id="required" type="checkbox" checked>
+              Required question
+            </label>
+            <label class="checkbox-row">
+              <input id="active" type="checkbox" checked>
+              Active
+            </label>
+          </div>
+
+          <!-- Options Editor (shown for decision/yes_no/multiple_choice) -->
+          <div id="optionsSection">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <label style="font-size:0.8rem;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:0.04em;">Answer Options</label>
+              <button type="button" id="addOptionBtn" class="btn-secondary btn-sm">+ Add Option</button>
+            </div>
+            <div id="optionsList" class="options-list"></div>
+            <p style="font-size:0.75rem;color:var(--text-3);margin-top:6px;">Mark an option as <strong>FAIL</strong> to flag it as a defect.</p>
+          </div>
+
+          <div class="editor-actions">
+            <button type="submit" class="btn-primary">Save Question</button>
+            <button id="resetFormBtn" type="button" class="btn-secondary">Reset</button>
+            <button id="deactivateBtn" type="button" class="btn-danger" style="display:none;">🔇 Deactivate</button>
+          </div>
+          <p id="formStatus" class="status-msg"></p>
+        </form>
+      </div>
+    </section>
+
+    <!-- ── PREVIEW TAB ── -->
+    <section id="previewTab" class="panel hidden">
+      <div class="panel-head">
+        <div>
+          <h2>Questionnaire Preview</h2>
+          <p>Exactly what inspectors see after scanning the QR code. Dynamically loaded from the database.</p>
+        </div>
+      </div>
+      <div id="previewList" class="preview-list"></div>
+    </section>
+
+    <!-- ── EXCEL TAB ── -->
+    <section id="excelTab" class="panel hidden">
+      <div class="panel-head">
+        <div>
+          <h2>Excel Import / Export</h2>
+          <p>Excel is an import/export mechanism only — the database is the live source of truth.</p>
+        </div>
+      </div>
+
+      <div class="excel-grid">
+        <!-- Export Questionnaire -->
+        <div class="box">
+          <h3>📥 Export Questionnaire</h3>
+          <p>Downloads the current active questionnaire from the database as an Excel file. Columns: Question Number, Section, Question, Question Type, Required, Active, Options.</p>
+          <a class="btn-dark button" href="/api/export/questionnaire" download>Download Questionnaire .xlsx</a>
+        </div>
+
+        <!-- Export Inspection Records -->
+        <div class="box">
+          <h3>📤 Export Inspection Records</h3>
+          <p>Downloads all inspection results from the database as Excel. Includes inspector, date, ladder, type, per-question results, and remarks.</p>
+          <a class="btn-dark button" href="/api/export/inspections" download>Download Records .xlsx</a>
+        </div>
+
+        <!-- Import Questionnaire -->
+        <div class="box" style="grid-column: 1 / -1;">
+          <h3>📂 Import Questionnaire from Excel</h3>
+          <p>Upload an Excel file to replace the active questionnaire. Required columns: <code>Question Number</code>, <code>Section</code>, <code>Question</code>, <code>Question Type</code>, <code>Required</code>, <code>Options</code>.</p>
+          <p style="color:var(--amber-dark);font-weight:600;margin-bottom:12px;">⚠️ Validate first, then confirm import. Existing inspection records are never deleted.</p>
+
+          <form id="importForm">
+            <div class="form-field">
+              <label for="excelFile">Select Excel File (.xlsx)</label>
+              <input id="excelFile" type="file" accept=".xlsx,.xls" required style="padding:8px;cursor:pointer;">
+            </div>
+            <div class="import-actions">
+              <button type="submit" data-confirm="false" class="btn-secondary">🔍 Validate File</button>
+              <button type="submit" data-confirm="true" class="btn-danger">⚡ Import Confirmed</button>
+            </div>
+          </form>
+          <pre id="importResult" class="import-result"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── RECORDS TAB ── -->
+    <section id="recordsTab" class="panel hidden">
+      <div class="panel-head">
+        <div>
+          <h2>Inspection Records</h2>
+          <p>View, filter, and export submitted inspection results.</p>
+        </div>
+        <div class="panel-head-actions">
+          <a class="btn-secondary button" href="/api/export/inspections" download>📤 Export Records</a>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div id="recordStats" class="stats-row"></div>
+
+      <!-- Filters -->
+      <div class="filters">
+        <input id="filterFrom" type="date" aria-label="From date" title="From date">
+        <input id="filterTo"   type="date" aria-label="To date"   title="To date">
+        <input id="filterLadder"    placeholder="Ladder / equipment">
+        <input id="filterInspector" placeholder="Inspector name">
+        <select id="filterStatus" aria-label="Result status">
+          <option value="">Any result</option>
+          <option value="PASS">PASS only</option>
+          <option value="FAIL">FAIL only</option>
+        </select>
+        <button id="loadRecordsBtn" type="button" class="btn-primary">Apply Filters</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Ladder / Location</th>
+              <th>Inspector</th>
+              <th>Type / Height</th>
+              <th>Result</th>
+              <th>Answers</th>
+              <th>Ref ID</th>
+            </tr>
+          </thead>
+          <tbody id="recordRows">
+            <tr><td colspan="7" style="padding:32px;text-align:center;color:var(--text-3);">Use "Apply Filters" to load records.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </div><!-- /appView -->
+
+  <script src="admin.js"></script>
+</body>
+</html>
