@@ -168,7 +168,7 @@ function resetForm() {
   renderOptionsEditor([
     { option_label: 'PASS', option_value: 'PASS', is_fail_value: false },
     { option_label: 'FAIL', option_value: 'FAIL', is_fail_value: true },
-    { option_label: 'N/A',  option_value: 'N/A',  is_fail_value: false },
+    
   ]);
   q('formStatus').textContent = '';
   q('formStatus').className = 'status-msg';
@@ -248,7 +248,7 @@ q('questionType').addEventListener('change', function() {
   if (needsOptions && !q('optionsList').children.length) {
     addOptionRow({ option_label: 'PASS', option_value: 'PASS', is_fail_value: false });
     addOptionRow({ option_label: 'FAIL', option_value: 'FAIL', is_fail_value: true });
-    addOptionRow({ option_label: 'N/A',  option_value: 'N/A',  is_fail_value: false });
+    
   }
 });
 
@@ -336,11 +336,10 @@ q('questionForm').addEventListener('submit', async e => {
 function renderPreview() {
   const container = q('previewList');
   if (!questions.length) {
-    container.innerHTML = '<p style="color:var(--text-3);padding:24px;">No active questions.</p>';
+    container.innerHTML = '<p style="color:var(--text-3);padding:24px;">No questions found.</p>';
     return;
   }
 
-  const active = questions.filter(x => x.is_active);
   const sections = [
     { key: 'general',   label: '🔧 General Inspection Points', icon: '🔧' },
     { key: 'extension', label: '🔄 Extension Ladder Specific', icon: '🔄' },
@@ -348,16 +347,17 @@ function renderPreview() {
   ];
 
   container.innerHTML = sections.map(sec => {
-    const items = active.filter(x => x.category === sec.key);
+    const items = questions.filter(x => x.category === sec.key);
     if (!items.length) return '';
     return `
       <div class="preview-section fade-in">
         <div class="preview-section-title">${sec.label} <span style="margin-left:auto;font-size:0.75rem;opacity:0.7;">${items.length} questions</span></div>
         ${items.map((item, i) => `
-          <div class="preview-question">
+          <div class="preview-question ${item.is_active ? '' : 'inactive'}" style="${item.is_active ? '' : 'opacity:0.6;'}">
             <span class="preview-num">#${item.display_order}</span>
             <span class="preview-text">${esc(item.question)}${item.is_required ? ' <span style="color:var(--fail);font-size:0.85em;">*</span>' : ''}</span>
             <span class="preview-type-badge">${typeBadge(item.question_type)}</span>
+            ${!item.is_active ? '<span class="badge badge-inactive" style="margin-left:8px;">Inactive</span>' : '<span class="badge badge-active" style="margin-left:8px;">Active</span>'}
           </div>
         `).join('')}
       </div>
@@ -365,60 +365,7 @@ function renderPreview() {
   }).join('');
 }
 
-/* ═══════════════════════════════════════════════════════════
-   EXCEL TAB
-   ═══════════════════════════════════════════════════════════ */
-const importForm = q('importForm');
 
-importForm.addEventListener('submit', async e => {
-  e.preventDefault();
-  const fileInput = q('excelFile');
-  const isConfirm = e.submitter?.dataset.confirm === 'true';
-  const resultEl = q('importResult');
-
-  if (!fileInput.files.length) {
-    resultEl.textContent = 'Please select an Excel file first.';
-    resultEl.className = 'import-result has-errors visible';
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append('file', fileInput.files[0]);
-  if (isConfirm) formData.append('confirm', 'true');
-
-  resultEl.textContent = isConfirm ? 'Importing...' : 'Validating...';
-  resultEl.className = 'import-result visible';
-
-  try {
-    const response = await fetch('/api/import/questionnaire', {
-      method: 'POST',
-      body: formData,
-      credentials: 'same-origin',
-    });
-    const data = await response.json();
-
-    if (data.errors && data.errors.length > 0) {
-      resultEl.textContent = '❌ Validation errors:\n' + data.errors.join('\n');
-      resultEl.className = 'import-result has-errors visible';
-      importedPreview = null;
-    } else if (isConfirm && data.imported !== undefined) {
-      resultEl.textContent = `✅ Successfully imported ${data.imported} questions.`;
-      resultEl.className = 'import-result has-ok visible';
-      importedPreview = null;
-      await loadQuestions();
-    } else if (data.preview) {
-      importedPreview = data;
-      const previewText = data.preview.map((q, i) =>
-        `${i+1}. [${q.category}] ${q.question} (${q.question_type})`
-      ).join('\n');
-      resultEl.textContent = `✅ Validation passed! ${data.preview.length} questions found:\n\n${previewText}\n\nClick "Import Confirmed" to apply.`;
-      resultEl.className = 'import-result has-ok visible';
-    }
-  } catch (err) {
-    resultEl.textContent = '❌ Error: ' + err.message;
-    resultEl.className = 'import-result has-errors visible';
-  }
-});
 
 /* ═══════════════════════════════════════════════════════════
    RECORDS TAB
@@ -441,6 +388,7 @@ async function loadRecords() {
 
   try {
     const records = await api('GET', '/inspections?' + params);
+    window.currentRecords = records;
     renderRecords(records);
     renderRecordStats(records);
   } catch (err) {
@@ -472,13 +420,57 @@ function renderRecords(records) {
     <tr>
       <td class="mono" style="white-space:nowrap;">${r.inspection_date || '—'}</td>
       <td><strong>${esc(r.ladder_no)}</strong><br><span style="font-size:0.78rem;color:var(--text-2);">${esc(r.section)}</span></td>
-      <td>${esc(r.inspector_name)}</td>
+      <td>${esc(r.inspector_name)}<br><span style="font-size:0.78rem;color:var(--text-2);">EPF: ${esc(r.epf_number)}</span></td>
       <td style="text-transform:capitalize;">${esc(r.ladder_type)}<br><span style="font-size:0.78rem;color:var(--text-2);">${r.height_feet} ft</span></td>
       <td><span class="badge ${r.overall_result === 'PASS' ? 'badge-pass' : 'badge-fail'}">${r.overall_result}</span></td>
       <td class="mono" style="font-size:0.8rem;">${r.answer_count ?? '—'} / ${r.fail_count > 0 ? `<span style="color:var(--fail);">${r.fail_count} fail</span>` : '<span style="color:var(--pass);">0 fail</span>'}</td>
-      <td style="font-size:0.75rem;color:var(--text-3);" title="${esc(r.id)}">${String(r.id).slice(0,8)}…</td>
+      <td>
+        <button class="btn-secondary btn-sm" onclick="toggleRecordDetails('${r.id}', this)" style="padding: 4px 8px; font-size: 0.75rem;">View Details</button>
+        <button class="btn-primary btn-sm" onclick="printRecord('${r.id}')" style="padding: 4px 8px; font-size: 0.75rem; margin-left: 4px;">Print</button>
+      </td>
+    </tr>
+    <tr id="details-${r.id}" class="record-details hidden" style="background: rgba(0,0,0,0.1);">
+      <td colspan="7" style="padding: 0;">
+        <div class="details-content" style="padding: 16px; border-left: 3px solid var(--primary);">Loading...</div>
+      </td>
     </tr>
   `).join('');
+}
+
+window.toggleRecordDetails = async function(id, btn) {
+  const row = document.getElementById(`details-${id}`);
+  if (!row.classList.contains('hidden')) {
+    row.classList.add('hidden');
+    btn.textContent = 'View Details';
+    return;
+  }
+  row.classList.remove('hidden');
+  btn.textContent = 'Hide Details';
+  const content = row.querySelector('.details-content');
+  if (content.dataset.loaded) return;
+  content.innerHTML = 'Loading answers...';
+  try {
+    const answers = await api('GET', `/inspections/${id}`);
+    content.innerHTML = `<table style="width:100%; font-size:0.85rem; margin:0; background:transparent;">
+      <thead>
+        <tr><th style="padding:6px;border-bottom:1px solid var(--border);text-align:left;">#</th><th style="padding:6px;border-bottom:1px solid var(--border);text-align:left;">Section</th><th style="padding:6px;border-bottom:1px solid var(--border);text-align:left;">Question</th><th style="padding:6px;border-bottom:1px solid var(--border);text-align:left;">Result</th><th style="padding:6px;border-bottom:1px solid var(--border);text-align:left;">Remarks</th></tr>
+      </thead>
+      <tbody>
+        ${answers.map(a => `
+          <tr>
+            <td style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.05);">${a.order}</td>
+            <td style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.05);">${esc(a.category)}</td>
+            <td style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.05);">${esc(a.question)}</td>
+            <td style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.05);"><span class="badge ${a.result === 'FAIL' ? 'badge-fail' : (a.result === 'PASS' ? 'badge-pass' : 'badge-inactive')}">${esc(a.answer_label || a.result)}</span></td>
+            <td style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.05);">${esc(a.remarks || '')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>`;
+    content.dataset.loaded = 'true';
+  } catch (err) {
+    content.innerHTML = '<span style="color:var(--fail);">Failed to load details: ' + esc(err.message) + '</span>';
+  }
 }
 
 q('loadRecordsBtn').addEventListener('click', loadRecords);
@@ -488,3 +480,65 @@ q('loadRecordsBtn').addEventListener('click', loadRecords);
 
 /* ─── Init ───────────────────────────────────────────────── */
 checkSession();
+
+window.printRecord = async function(id) {
+  try {
+    const answers = await api('GET', '/inspections/' + id);
+    const r = window.currentRecords ? window.currentRecords.find(rec => rec.id === id) : null;
+    
+    let content = '<div style="font-family: sans-serif; padding: 20px; max-width: 900px; margin: 0 auto;">';
+    
+    if (r) {
+      content += '<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px;">';
+      content += '<div><h2 style="margin: 0 0 10px 0;">Inspection Report</h2>';
+      content += '<p style="margin: 3px 0;"><strong>Ladder No.:</strong> ' + (r.ladder_no || 'N/A') + '</p>';
+      content += '<p style="margin: 3px 0;"><strong>Date:</strong> ' + (r.inspection_date || 'N/A') + ' &nbsp;|&nbsp; <strong>Inspector:</strong> ' + (r.inspector_name || 'N/A') + '</p>';
+      content += '<p style="margin: 3px 0;"><strong>Location/Section:</strong> ' + (r.section || 'N/A') + '</p>';
+      content += '<p style="margin: 3px 0;"><strong>Type & Height:</strong> ' + (r.ladder_type || 'N/A') + ' (' + (r.height_feet || 'N/A') + ' ft)</p>';
+      content += '</div>';
+      content += '<div style="text-align: right;">';
+      const badgeColor = r.overall_result === 'PASS' ? '#2e7d32' : '#c62828';
+      content += '<div style="display: inline-block; padding: 8px 16px; border-radius: 4px; color: white; font-weight: bold; font-size: 1.2rem; background: ' + badgeColor + ';">' + (r.overall_result || 'UNKNOWN') + '</div>';
+      content += '</div></div>';
+      
+      if (r.remarks) {
+        content += '<div style="margin-bottom: 20px; padding: 10px; background: #f5f5f5; border-left: 4px solid #888;">';
+        content += '<h4 style="margin: 0 0 5px 0;">Overall Remarks:</h4>';
+        content += '<p style="margin: 0; white-space: pre-wrap;">' + r.remarks + '</p>';
+        content += '</div>';
+      }
+    } else {
+      content += '<h2>Inspection Report: ' + id + '</h2>';
+    }
+    
+    content += '<table style="width:100%; border-collapse: collapse; margin-top: 20px;">';
+    content += '<tr><th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Order</th><th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Category</th><th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Question</th><th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Result</th><th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Remarks</th></tr>';
+    
+    answers.forEach(a => {
+      let resColor = '';
+      if (a.result === 'PASS') resColor = 'color: #2e7d32; font-weight: bold;';
+      else if (a.result === 'FAIL') resColor = 'color: #c62828; font-weight: bold;';
+      
+      content += '<tr>';
+      content += '<td style="border: 1px solid #ccc; padding: 8px;">' + a.order + '</td>';
+      content += '<td style="border: 1px solid #ccc; padding: 8px;">' + a.category + '</td>';
+      content += '<td style="border: 1px solid #ccc; padding: 8px;">' + a.question + '</td>';
+      content += '<td style="border: 1px solid #ccc; padding: 8px; ' + resColor + '">' + (a.answer_label || a.result) + '</td>';
+      content += '<td style="border: 1px solid #ccc; padding: 8px;">' + (a.remarks || '') + '</td>';
+      content += '</tr>';
+    });
+    
+    content += '</table></div>';
+    
+    const printWindow = window.open('', '', 'height=600,width=800');
+    printWindow.document.write('<html><head><title>Print Record</title>');
+    printWindow.document.write('</head><body >');
+    printWindow.document.write(content);
+    printWindow.document.write('<script>window.onload = function() { window.print(); window.close(); }<\/script>');
+    printWindow.document.write('</body></html>');
+    printWindow.document.close();
+    printWindow.focus();
+  } catch(e) {
+    alert('Failed to print: ' + e.message);
+  }
+};

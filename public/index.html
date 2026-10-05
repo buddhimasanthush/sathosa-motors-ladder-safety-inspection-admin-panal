@@ -51,7 +51,6 @@
     <nav class="tabs">
       <button class="tab active" data-tab="questions">📋 Questions</button>
       <button class="tab" data-tab="preview">👁 Preview</button>
-      <button class="tab" data-tab="excel">📊 Excel</button>
       <button class="tab" data-tab="records">🗂 Records</button>
     </nav>
 
@@ -150,12 +149,12 @@
             <p style="font-size:0.75rem;color:var(--text-3);margin-top:6px;">Mark an option as <strong>FAIL</strong> to flag it as a defect.</p>
           </div>
 
-          <div class="editor-actions">
+          <div class="editor-actions" style="position: sticky; bottom: 0; background: var(--surface-1); padding: 12px; margin-top: auto; border-top: 1px solid var(--border); border-radius: 6px; box-shadow: 0 -4px 12px rgba(0,0,0,0.1); z-index: 10;">
             <button type="submit" class="btn-primary">Save Question</button>
             <button id="resetFormBtn" type="button" class="btn-secondary">Reset</button>
             <button id="deactivateBtn" type="button" class="btn-danger" style="display:none;">🔇 Deactivate</button>
+            <p id="formStatus" class="status-msg" style="margin-top: 8px; margin-bottom: 0;"></p>
           </div>
-          <p id="formStatus" class="status-msg"></p>
         </form>
       </div>
     </section>
@@ -171,50 +170,7 @@
       <div id="previewList" class="preview-list"></div>
     </section>
 
-    <!-- ── EXCEL TAB ── -->
-    <section id="excelTab" class="panel hidden">
-      <div class="panel-head">
-        <div>
-          <h2>Excel Import / Export</h2>
-          <p>Excel is an import/export mechanism only — the database is the live source of truth.</p>
-        </div>
-      </div>
 
-      <div class="excel-grid">
-        <!-- Export Questionnaire -->
-        <div class="box">
-          <h3>📥 Export Questionnaire</h3>
-          <p>Downloads the current active questionnaire from the database as an Excel file. Columns: Question Number, Section, Question, Question Type, Required, Active, Options.</p>
-          <a class="btn-dark button" href="/api/export/questionnaire" download>Download Questionnaire .xlsx</a>
-        </div>
-
-        <!-- Export Inspection Records -->
-        <div class="box">
-          <h3>📤 Export Inspection Records</h3>
-          <p>Downloads all inspection results from the database as Excel. Includes inspector, date, ladder, type, per-question results, and remarks.</p>
-          <a class="btn-dark button" href="/api/export/inspections" download>Download Records .xlsx</a>
-        </div>
-
-        <!-- Import Questionnaire -->
-        <div class="box" style="grid-column: 1 / -1;">
-          <h3>📂 Import Questionnaire from Excel</h3>
-          <p>Upload an Excel file to replace the active questionnaire. Required columns: <code>Question Number</code>, <code>Section</code>, <code>Question</code>, <code>Question Type</code>, <code>Required</code>, <code>Options</code>.</p>
-          <p style="color:var(--amber-dark);font-weight:600;margin-bottom:12px;">⚠️ Validate first, then confirm import. Existing inspection records are never deleted.</p>
-
-          <form id="importForm">
-            <div class="form-field">
-              <label for="excelFile">Select Excel File (.xlsx)</label>
-              <input id="excelFile" type="file" accept=".xlsx,.xls" required style="padding:8px;cursor:pointer;">
-            </div>
-            <div class="import-actions">
-              <button type="submit" data-confirm="false" class="btn-secondary">🔍 Validate File</button>
-              <button type="submit" data-confirm="true" class="btn-danger">⚡ Import Confirmed</button>
-            </div>
-          </form>
-          <pre id="importResult" class="import-result"></pre>
-        </div>
-      </div>
-    </section>
 
     <!-- ── RECORDS TAB ── -->
     <section id="recordsTab" class="panel hidden">
@@ -223,8 +179,9 @@
           <h2>Inspection Records</h2>
           <p>View, filter, and export submitted inspection results.</p>
         </div>
-        <div class="panel-head-actions">
-          <a class="btn-secondary button" href="/api/export/inspections" download>📤 Export Records</a>
+        <div class="panel-head-actions" style="display: flex; gap: 10px;">
+          <a class="btn-secondary button" href="/api/export/questionnaire" download>📥 Export Questionnaire</a>
+          
         </div>
       </div>
 
@@ -251,11 +208,11 @@
             <tr>
               <th>Date</th>
               <th>Ladder / Location</th>
-              <th>Inspector</th>
+              <th>Inspector / EPF</th>
               <th>Type / Height</th>
               <th>Result</th>
               <th>Answers</th>
-              <th>Ref ID</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody id="recordRows">
@@ -270,3 +227,4 @@
   <script src="admin.js"></script>
 </body>
 </html>
+
