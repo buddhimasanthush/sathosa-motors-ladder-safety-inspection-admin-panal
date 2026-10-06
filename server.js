@@ -155,6 +155,9 @@ app.post('/api/questions', requireAdmin, async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('begin');
+    if (q.display_order) {
+      await client.query('update inspection_points set display_order = display_order + 1 where display_order >= $1', [q.display_order]);
+    }
     const { rows } = await client.query(
       `insert into inspection_points (category, question, question_type, display_order, is_required, is_active, allow_remarks)
        values ($1, $2, $3, $4, $5, $6, true)
@@ -177,6 +180,15 @@ app.put('/api/questions/:id', requireAdmin, async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('begin');
+    const { rows: curr } = await client.query('select display_order from inspection_points where id = $1', [req.params.id]);
+    const currOrder = curr[0]?.display_order;
+    if (q.display_order && currOrder && q.display_order !== currOrder) {
+      if (q.display_order < currOrder) {
+        await client.query('update inspection_points set display_order = display_order + 1 where display_order >= $1 and display_order < $2', [q.display_order, currOrder]);
+      } else {
+        await client.query('update inspection_points set display_order = display_order - 1 where display_order <= $1 and display_order > $2', [q.display_order, currOrder]);
+      }
+    }
     await client.query(
       `update inspection_points
           set category=$1, question=$2, question_type=$3, display_order=$4,
@@ -216,7 +228,7 @@ app.get('/api/inspections', requireAdmin, async (req, res, next) => {
     const where = filters.length ? `where ${filters.join(' and ')}` : '';
     const { rows } = await pool.query(`
       select i.id, i.inspection_date, i.ladder_no, i.section, i.height_feet, i.ladder_type,
-             i.inspector_name, i.overall_result, i.remarks, i.created_at,
+             i.inspector_name, i.epf_number, i.overall_result, i.remarks, i.created_at,
              count(r.id)::int as answer_count,
              count(*) filter (where r.result = 'FAIL')::int as fail_count
         from inspections i
@@ -227,6 +239,167 @@ app.get('/api/inspections', requireAdmin, async (req, res, next) => {
        limit 500
     `, values);
     res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/inspections/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(`
+      select r.display_order_snapshot as order,
+             r.category_snapshot as category,
+             r.question_text_snapshot as question,
+             r.result, coalesce(r.answer_label, r.result) as answer_label, r.remarks
+        from inspection_results r
+       where r.inspection_id = $1
+       order by r.display_order_snapshot asc
+    `, [req.params.id]);
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/export/questionnaire', requireAdmin, async (req, res, next) => {
+  try {
+    const questions = await getQuestions();
+    const rows = questions.map(q => ({
+      'Question Number': q.display_order,
+      Section: q.category,
+      Question: q.question,
+      'Question Type': q.question_type,
+      Required: q.is_required ? 'yes' : 'no',
+      Active: q.is_active ? 'yes' : 'no',
+      Options: q.options.map(o => `${o.option_label}=${o.option_value}${o.is_fail_value ? ':fail' : ''}`).join('|'),
+    }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), 'Questionnaire');
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="questionnaire.xlsx"');
+    res.send(buffer);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
+  try {
+    const filters = [];
+    const values = [];
+    if (req.query.from) { values.push(req.query.from); filters.push(`i.inspection_date >= $${values.length}`); }
+    if (req.query.to) { values.push(req.query.to); filters.push(`i.inspection_date <= $${values.length}`); }
+    if (req.query.ladder) { values.push(`%${req.query.ladder}%`); filters.push(`i.ladder_no ilike $${values.length}`); }
+    if (req.query.inspector) { values.push(`%${req.query.inspector}%`); filters.push(`i.inspector_name ilike $${values.length}`); }
+    if (req.query.status) { values.push(req.query.status); filters.push(`i.overall_result = $${values.length}`); }
+    
+    const where = filters.length ? `where ${filters.join(' and ')}` : '';
+
+    const { rows } = await pool.query(`
+      select i.id as inspection_id,
+             i.inspection_date,
+             i.ladder_no,
+             i.section,
+             i.height_feet,
+             i.ladder_type,
+             i.inspector_name,
+             i.epf_number,
+             i.overall_result,
+             i.remarks                     as overall_remarks,
+             i.created_at,
+             r.display_order_snapshot      as question_number,
+             r.category_snapshot           as category,
+             r.question_text_snapshot      as question,
+             r.result                      as answer,
+             r.remarks                     as answer_remarks
+        from inspections i
+        left join inspection_results r on r.inspection_id = i.id
+        ${where}
+       order by i.inspection_date desc, i.created_at desc, r.display_order_snapshot asc
+    `, values);
+
+    const inspectionsMap = new Map();
+    
+    rows.forEach(r => {
+      if (!inspectionsMap.has(r.inspection_id)) {
+        inspectionsMap.set(r.inspection_id, {
+          'Inspection ID': r.inspection_id,
+          'Date': r.inspection_date ? r.inspection_date.toISOString().split('T')[0] : '',
+          'Ladder No': r.ladder_no,
+          'Section/Location': r.section,
+          'Height (ft)': r.height_feet,
+          'Type': r.ladder_type,
+          'Inspector Name': r.inspector_name,
+          'EPF Number': r.epf_number,
+          'Overall Result': r.overall_result,
+          'Overall Remarks': r.overall_remarks
+        });
+      }
+      if (r.question) {
+        inspectionsMap.get(r.inspection_id)[r.question] = r.answer;
+        if (r.answer_remarks) {
+          inspectionsMap.get(r.inspection_id)[`${r.question} (Remarks)`] = r.answer_remarks;
+        }
+      }
+    });
+
+    const finalRows = Array.from(inspectionsMap.values());
+
+    // LOAD TEMPLATE
+    let workbook;
+    try {
+      const templatePath = path.join(__dirname, 'template.xlsx');
+      const templateBuffer = fs.readFileSync(templatePath);
+      workbook = XLSX.read(templateBuffer, { type: 'buffer' });
+      
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      
+      const templateRows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      const headers = templateRows[6] || []; 
+      
+      const mappedData = finalRows.map(row => {
+        const arr = [];
+        headers.forEach((header, i) => {
+          if (!header) return arr.push('');
+          const h = header.trim();
+          if (h === 'Ladder No.') arr[i] = row['Ladder No'] || '';
+          else if (h === 'Section') arr[i] = row['Section/Location'] || '';
+          else if (h === 'Feet') arr[i] = row['Height (ft)'] || '';
+          else if (h === 'Ladder Type (Step ladder/Extension ladder)') arr[i] = row['Type'] || '';
+          else {
+            arr[i] = row[h] || '';
+          }
+        });
+        // Append missing metadata
+        arr[28] = row['Date'] || '';
+        arr[29] = row['Inspector Name'] || '';
+        arr[30] = row['EPF Number'] || '';
+        arr[31] = row['Overall Result'] || '';
+        arr[32] = row['Overall Remarks'] || '';
+        return arr;
+      });
+
+      sheet['AC7'] = { v: 'Date', t: 's' };
+      sheet['AD7'] = { v: 'Inspector Name', t: 's' };
+      sheet['AE7'] = { v: 'EPF Number', t: 's' };
+      sheet['AF7'] = { v: 'Overall Result', t: 's' };
+      sheet['AG7'] = { v: 'Overall Remarks', t: 's' };
+      
+      sheet['!ref'] = 'A1:AG' + (7 + Math.max(1, mappedData.length));
+      
+      XLSX.utils.sheet_add_aoa(sheet, mappedData, { origin: "A8" });
+    } catch (tmplErr) {
+      console.error(tmplErr);
+      workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(finalRows.length ? finalRows : [{ note: 'No records found' }]), 'Inspection Results');
+    }
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="LADDER-CHECKLIST-EXPORT.xlsx"');
+    res.send(buffer);
   } catch (error) {
     next(error);
   }
@@ -290,8 +463,38 @@ app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
         ${where}
        order by i.inspection_date desc, i.created_at desc, r.display_order_snapshot asc
     `, values);
+    // Pivot data so each inspection is one row
+    const inspectionsMap = new Map();
+    
+    rows.forEach(r => {
+      if (!inspectionsMap.has(r.inspection_id)) {
+        inspectionsMap.set(r.inspection_id, {
+          'Inspection ID': r.inspection_id,
+          'Date': r.inspection_date,
+          'Ladder No': r.ladder_no,
+          'Section/Location': r.section,
+          'Height (ft)': r.height_feet,
+          'Ladder Type': r.ladder_type,
+          'Inspector Name': r.inspector_name,
+          'Overall Result': r.overall_result,
+          'Overall Remarks': r.overall_remarks
+        });
+      }
+      
+      if (r.question) {
+        const qKey = `Q${r.question_number}: ${r.question}`;
+        const ins = inspectionsMap.get(r.inspection_id);
+        ins[qKey] = r.answer_label;
+        if (r.answer_remarks) {
+          ins[`${qKey} (Remarks)`] = r.answer_remarks;
+        }
+      }
+    });
+
+    const finalRows = Array.from(inspectionsMap.values());
+
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows.length ? rows : [{ note: 'No records found' }]), 'Inspection Results');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(finalRows.length ? finalRows : [{ note: 'No records found' }]), 'Inspection Results');
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="inspection-records.xlsx"');
