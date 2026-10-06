@@ -486,7 +486,7 @@ q('loadRecordsBtn').addEventListener('click', loadRecords);
 
 q('exportPdfBtn')?.addEventListener('click', () => {
   try {
-    const table = q('recordsTbody').cloneNode(true);
+    const table = q('recordRows').cloneNode(true);
     // Remove details rows from the clone
     table.querySelectorAll('.record-details').forEach(el => el.remove());
     // Remove the actions column header & cells if needed, or just let it be.
