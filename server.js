@@ -357,18 +357,25 @@ app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
          headers[i] = typeof val === 'string' ? val.trim() : (val ? String(val).trim() : '');
       }
       
+      const styleRow = sheet.getRow(8);
+
       finalRows.forEach((row, rowIndex) => {
         const excelRowNumber = 8 + rowIndex;
         const excelRow = sheet.getRow(excelRowNumber);
         
         headers.forEach((h, colNumber) => {
           if (!h) return;
-          if (h === 'Ladder No.') excelRow.getCell(colNumber).value = row['Ladder No'] || '';
-          else if (h === 'Section') excelRow.getCell(colNumber).value = row['Section/Location'] || '';
-          else if (h === 'Feet') excelRow.getCell(colNumber).value = row['Height (ft)'] || '';
-          else if (h === 'Ladder Type (Step ladder/Extension ladder)') excelRow.getCell(colNumber).value = row['Type'] || '';
+          const targetCell = excelRow.getCell(colNumber);
+          
+          // Copy style from row 8 to preserve borders and formatting
+          targetCell.style = Object.assign({}, styleRow.getCell(colNumber).style);
+          
+          if (h === 'Ladder No.') targetCell.value = row['Ladder No'] || '';
+          else if (h === 'Section') targetCell.value = row['Section/Location'] || '';
+          else if (h === 'Feet') targetCell.value = row['Height (ft)'] || '';
+          else if (h === 'Ladder Type (Step ladder/Extension ladder)') targetCell.value = row['Type'] || '';
           else {
-            excelRow.getCell(colNumber).value = row[h] || '';
+            targetCell.value = row[h] || '';
           }
         });
         excelRow.commit();
