@@ -434,7 +434,7 @@ function renderRecords(records) {
       <td class="mono" style="font-size:0.8rem;">${r.answer_count ?? '—'} / ${r.fail_count > 0 ? `<span style="color:var(--fail);">${r.fail_count} fail</span>` : '<span style="color:var(--pass);">0 fail</span>'}</td>
       <td>
         <button class="btn-secondary btn-sm" onclick="toggleRecordDetails('${r.id}', this)" style="padding: 4px 8px; font-size: 0.75rem;">View Details</button>
-        <button class="btn-primary btn-sm" onclick="printRecord('${r.id}')" style="padding: 4px 8px; font-size: 0.75rem; margin-left: 4px;">Print</button>
+        <button class="btn-primary btn-sm" onclick="printRecord('${r.id}')" style="padding: 4px 8px; font-size: 0.75rem; margin-left: 4px;">PDF</button>
       </td>
     </tr>
     <tr id="details-${r.id}" class="record-details hidden" style="background: rgba(0,0,0,0.1);">
@@ -507,59 +507,53 @@ window.printRecord = async function(id) {
     const answers = await api('GET', '/inspections/' + id);
     const r = window.currentRecords ? window.currentRecords.find(rec => rec.id === id) : null;
     
-    let content = '<div style="font-family: sans-serif; padding: 20px; max-width: 900px; margin: 0 auto;">';
+    let content = '<div style="font-family: sans-serif; padding: 30px; color: #000; background: #fff; max-width: 900px; margin: 0 auto;">';
     
     if (r) {
       content += '<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px;">';
       content += '<div><h2 style="margin: 0 0 10px 0;">Inspection Report</h2>';
       content += '<p style="margin: 3px 0;"><strong>Ladder No.:</strong> ' + (r.ladder_no || 'N/A') + '</p>';
-      content += '<p style="margin: 3px 0;"><strong>Date:</strong> ' + (r.inspection_date || 'N/A') + ' &nbsp;|&nbsp; <strong>Inspector:</strong> ' + (r.inspector_name || 'N/A') + '</p>';
-      content += '<p style="margin: 3px 0;"><strong>Location/Section:</strong> ' + (r.section || 'N/A') + '</p>';
-      content += '<p style="margin: 3px 0;"><strong>Type & Height:</strong> ' + (r.ladder_type || 'N/A') + ' (' + (r.height_feet || 'N/A') + ' ft)</p>';
-      content += '</div>';
+      content += '<p style="margin: 3px 0;"><strong>Type:</strong> ' + (r.ladder_type || 'N/A') + '</p>';
+      content += '<p style="margin: 3px 0;"><strong>Height:</strong> ' + (r.height_feet || 0) + ' ft</p></div>';
       content += '<div style="text-align: right;">';
-      const badgeColor = r.overall_result === 'PASS' ? '#2e7d32' : '#c62828';
-      content += '<div style="display: inline-block; padding: 8px 16px; border-radius: 4px; color: white; font-weight: bold; font-size: 1.2rem; background: ' + badgeColor + ';">' + (r.overall_result || 'UNKNOWN') + '</div>';
+      content += '<p style="margin: 3px 0;"><strong>Date:</strong> ' + (r.inspection_date ? r.inspection_date.split('T')[0] : 'N/A') + '</p>';
+      content += '<p style="margin: 3px 0;"><strong>Inspector:</strong> ' + (r.inspector_name || 'N/A') + '</p>';
+      content += '<p style="margin: 3px 0;"><strong>Result:</strong> <span style="color:' + (r.overall_result === 'PASS' ? 'green' : 'red') + ';font-weight:bold;">' + (r.overall_result || 'N/A') + '</span></p>';
       content += '</div></div>';
-      
-      if (r.remarks) {
-        content += '<div style="margin-bottom: 20px; padding: 10px; background: #f5f5f5; border-left: 4px solid #888;">';
-        content += '<h4 style="margin: 0 0 5px 0;">Overall Remarks:</h4>';
-        content += '<p style="margin: 0; white-space: pre-wrap;">' + r.remarks + '</p>';
-        content += '</div>';
-      }
-    } else {
-      content += '<h2>Inspection Report: ' + id + '</h2>';
     }
     
-    content += '<table style="width:100%; border-collapse: collapse; margin-top: 20px;">';
-    content += '<tr><th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Order</th><th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Category</th><th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Question</th><th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Result</th><th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Remarks</th></tr>';
+    content += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">';
+    content += '<tr style="background-color: #f3f4f6; border-bottom: 2px solid #d1d5db;">';
+    content += '<th style="text-align: left; padding: 10px; width: 5%;">#</th>';
+    content += '<th style="text-align: left; padding: 10px; width: 65%;">Question</th>';
+    content += '<th style="text-align: left; padding: 10px; width: 10%;">Result</th>';
+    content += '<th style="text-align: left; padding: 10px; width: 20%;">Remarks</th>';
+    content += '</tr>';
     
     answers.forEach(a => {
-      let resColor = '';
-      if (a.result === 'PASS') resColor = 'color: #2e7d32; font-weight: bold;';
-      else if (a.result === 'FAIL') resColor = 'color: #c62828; font-weight: bold;';
-      
-      content += '<tr>';
-      content += '<td style="border: 1px solid #ccc; padding: 8px;">' + a.order + '</td>';
-      content += '<td style="border: 1px solid #ccc; padding: 8px;">' + a.category + '</td>';
-      content += '<td style="border: 1px solid #ccc; padding: 8px;">' + a.question + '</td>';
-      content += '<td style="border: 1px solid #ccc; padding: 8px; ' + resColor + '">' + (a.answer_label || a.result) + '</td>';
-      content += '<td style="border: 1px solid #ccc; padding: 8px;">' + (a.remarks || '') + '</td>';
+      content += '<tr style="border-bottom: 1px solid #e5e7eb;">';
+      content += '<td style="padding: 10px; vertical-align: top;">' + (a.order || '-') + '</td>';
+      content += '<td style="padding: 10px; vertical-align: top;">' + esc(a.question) + '</td>';
+      content += '<td style="padding: 10px; vertical-align: top; font-weight: bold; color: ' + (a.result === 'PASS' ? 'green' : (a.result === 'FAIL' ? 'red' : 'black')) + ';">' + esc(a.answer_label || a.result) + '</td>';
+      content += '<td style="padding: 10px; vertical-align: top; font-size: 0.9em;">' + (esc(a.remarks) || '') + '</td>';
       content += '</tr>';
     });
-    
     content += '</table></div>';
     
-    const printWindow = window.open('', '', 'height=600,width=800');
-    printWindow.document.write('<html><head><title>Print Record</title>');
-    printWindow.document.write('</head><body >');
-    printWindow.document.write(content);
-    printWindow.document.write('<script>window.onload = function() { window.print(); window.close(); }<\/script>');
-    printWindow.document.write('</body></html>');
-    printWindow.document.close();
-    printWindow.focus();
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = content;
+    
+    const opt = {
+      margin:       0.5,
+      filename:     'inspection-' + (r ? r.ladder_no : id) + '.pdf',
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    
+    html2pdf().set(opt).from(wrapper).save();
+    
   } catch(e) {
-    showErrorModal('Failed to print: ' + e.message);
+    showErrorModal('Failed to export PDF: ' + e.message);
   }
 };
