@@ -483,6 +483,56 @@ window.toggleRecordDetails = async function(id, btn) {
 
 q('loadRecordsBtn').addEventListener('click', loadRecords);
 
+
+q('exportPdfBtn')?.addEventListener('click', () => {
+  try {
+    const table = q('recordsTbody').cloneNode(true);
+    // Remove details rows from the clone
+    table.querySelectorAll('.record-details').forEach(el => el.remove());
+    // Remove the actions column header & cells if needed, or just let it be.
+    
+    let content = '<div style="font-family: sans-serif; padding: 20px; color: #000; background: #fff; max-width: 1000px; margin: 0 auto;">';
+    content += '<h2 style="margin: 0 0 20px 0; border-bottom: 2px solid #333; padding-bottom: 10px;">Inspection Records Summary</h2>';
+    content += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">';
+    content += '<tr style="background-color: #f3f4f6; border-bottom: 2px solid #d1d5db; text-align: left;">';
+    content += '<th style="padding: 10px;">Date</th>';
+    content += '<th style="padding: 10px;">Ladder / Location</th>';
+    content += '<th style="padding: 10px;">Inspector / EPF</th>';
+    content += '<th style="padding: 10px;">Type / Height</th>';
+    content += '<th style="padding: 10px;">Result</th>';
+    content += '<th style="padding: 10px;">Answers</th>';
+    content += '</tr>';
+    
+    // Copy each non-details row
+    Array.from(table.children).forEach(tr => {
+      content += '<tr style="border-bottom: 1px solid #e5e7eb;">';
+      const tds = tr.querySelectorAll('td');
+      for(let i=0; i<6; i++) { // Skip the Actions column
+        content += '<td style="padding: 10px; vertical-align: top;">' + (tds[i] ? tds[i].innerHTML : '') + '</td>';
+      }
+      content += '</tr>';
+    });
+    
+    content += '</table></div>';
+    
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = content;
+    
+    const opt = {
+      margin:       0.5,
+      filename:     'inspection-summary.pdf',
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
+    };
+    
+    html2pdf().set(opt).from(wrapper).save();
+    
+  } catch(e) {
+    showErrorModal('Failed to export PDF summary: ' + e.message);
+  }
+});
+
 q('exportInspectionsBtn')?.addEventListener('click', () => {
   const params = new URLSearchParams();
   const from = q('filterFrom').value;
