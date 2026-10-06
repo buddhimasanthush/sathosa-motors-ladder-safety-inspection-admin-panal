@@ -358,6 +358,22 @@ app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
       }
       
       const styleRow = sheet.getRow(8);
+      
+      // Clear out any old dummy data baked into the template from row 8 onwards
+      const maxRowsToClear = Math.max(8 + finalRows.length, sheet.rowCount + 10);
+      for (let r = 8; r <= maxRowsToClear; r++) {
+          const clearRow = sheet.getRow(r);
+          clearRow.eachCell({ includeEmpty: true }, (cell) => {
+              cell.value = null; 
+              // Clear styles on rows 9+ so they don't have phantom borders
+              if (r > 8) {
+                  cell.style = {};
+              }
+          });
+          if (r > 8) {
+              clearRow.commit();
+          }
+      }
 
       finalRows.forEach((row, rowIndex) => {
         const excelRowNumber = 8 + rowIndex;
