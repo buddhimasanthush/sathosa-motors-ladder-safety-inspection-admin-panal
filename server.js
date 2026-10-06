@@ -343,6 +343,122 @@ app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
       await workbook.xlsx.readFile(templatePath);
       const sheet = workbook.getWorksheet(1);
       
+      const headerRow6 = sheet.getRow(6);
+      const headerRow7 = sheet.getRow(7);
+      const headers = [];
+      const maxCols = Math.max(headerRow6.cellCount, headerRow7.cellCount, 40);
+      for (let i = 1; i <= maxCols; i++) {
+         let val = headerRow7.getCell(i).value;
+         if (val && typeof val === 'object' && val.richText) val = val.richText.map(t=>t.text).join('');
+         if (!val) {
+             val = headerRow6.getCell(i).value;
+             if (val && typeof val === 'object' && val.richText) val = val.richText.map(t=>t.text).join('');
+         }
+         headers[i] = typeof val === 'string' ? val.trim() : (val ? String(val).trim() : '');
+      }
+      
+      finalRows.forEach((row, rowIndex) => {
+        const excelRowNumber = 8 + rowIndex;
+        const excelRow = sheet.getRow(excelRowNumber);
+        
+        headers.forEach((h, colNumber) => {
+          if (!h) return;
+          if (h === 'Ladder No.') excelRow.getCell(colNumber).value = row['Ladder No'] || '';
+          else if (h === 'Section') excelRow.getCell(colNumber).value = row['Section/Location'] || '';
+          else if (h === 'Feet') excelRow.getCell(colNumber).value = row['Height (ft)'] || '';
+          else if (h === 'Ladder Type (Step ladder/Extension ladder)') excelRow.getCell(colNumber).value = row['Type'] || '';
+          else {
+            excelRow.getCell(colNumber).value = row[h] || '';
+          }
+        });
+        excelRow.commit();
+      });
+      
+      buffer = await workbook.xlsx.writeBuffer();
+    } catch (tmplErr) {
+      console.error(tmplErr);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(finalRows.length ? finalRows : [{ note: 'No records found' }]), 'Inspection Results');
+      buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="questionnaire.xlsx"');
+    res.send(buffer);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
+  try {
+    const filters = [];
+    const values = [];
+    if (req.query.from) { values.push(req.query.from); filters.push(`i.inspection_date >= $${values.length}`); }
+    if (req.query.to) { values.push(req.query.to); filters.push(`i.inspection_date <= $${values.length}`); }
+    if (req.query.ladder) { values.push(`%${req.query.ladder}%`); filters.push(`i.ladder_no ilike $${values.length}`); }
+    if (req.query.inspector) { values.push(`%${req.query.inspector}%`); filters.push(`i.inspector_name ilike $${values.length}`); }
+    if (req.query.status) { values.push(req.query.status); filters.push(`i.overall_result = $${values.length}`); }
+    
+    const where = filters.length ? `where ${filters.join(' and ')}` : '';
+
+    const { rows } = await pool.query(`
+      select i.id as inspection_id,
+             i.inspection_date,
+             i.ladder_no,
+             i.section,
+             i.height_feet,
+             i.ladder_type,
+             i.inspector_name,
+             i.epf_number,
+             i.overall_result,
+             i.remarks                     as overall_remarks,
+             i.created_at,
+             r.display_order_snapshot      as question_number,
+             r.category_snapshot           as category,
+             r.question_text_snapshot      as question,
+             r.result                      as answer,
+             r.remarks                     as answer_remarks
+        from inspections i
+        left join inspection_results r on r.inspection_id = i.id
+        ${where}
+       order by i.inspection_date desc, i.created_at desc, r.display_order_snapshot asc
+    `, values);
+
+    const inspectionsMap = new Map();
+    
+    rows.forEach(r => {
+      if (!inspectionsMap.has(r.inspection_id)) {
+        inspectionsMap.set(r.inspection_id, {
+          'Inspection ID': r.inspection_id,
+          'Date': r.inspection_date ? r.inspection_date.toISOString().split('T')[0] : '',
+          'Ladder No': r.ladder_no,
+          'Section/Location': r.section,
+          'Height (ft)': r.height_feet,
+          'Type': r.ladder_type,
+          'Inspector Name': r.inspector_name,
+          'EPF Number': r.epf_number,
+          'Overall Result': r.overall_result,
+          'Overall Remarks': r.overall_remarks
+        });
+      }
+      if (r.question) {
+        inspectionsMap.get(r.inspection_id)[r.question] = r.answer;
+        if (r.answer_remarks) {
+          inspectionsMap.get(r.inspection_id)[`${r.question} (Remarks)`] = r.answer_remarks;
+        }
+      }
+    });
+
+    const finalRows = Array.from(inspectionsMap.values());
+
+    let buffer;
+    try {
+      const templatePath = path.join(__dirname, 'template.xlsx');
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(templatePath);
+      const sheet = workbook.getWorksheet(1);
+      
       const headerRow = sheet.getRow(7);
       const headers = [];
       headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
