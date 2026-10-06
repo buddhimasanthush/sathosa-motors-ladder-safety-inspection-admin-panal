@@ -391,8 +391,16 @@ app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
           else if (h === 'Feet') targetCell.value = row['Height (ft)'] || '';
           else if (h === 'Ladder Type (Step ladder/Extension ladder)') targetCell.value = row['Type'] || '';
           else {
-            targetCell.value = row[h] || '';
-          }
+              const cleanH = h.replace(/\s+/g, ' ').replace(/[?]/g, '').trim().toLowerCase();
+              let matchedVal = '';
+              for (const [key, val] of Object.entries(row)) {
+                  if (key.replace(/\s+/g, ' ').replace(/[?]/g, '').trim().toLowerCase() === cleanH) {
+                      matchedVal = val;
+                      break;
+                  }
+              }
+              targetCell.value = matchedVal || '';
+            }
         });
         excelRow.commit();
       });
