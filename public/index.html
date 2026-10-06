@@ -180,8 +180,7 @@
           <p>View, filter, and export submitted inspection results.</p>
         </div>
         <div class="panel-head-actions" style="display: flex; gap: 10px;">
-          <a class="btn-secondary button" href="/api/export/questionnaire" download>📥 Export Questionnaire</a>
-          
+          <button id="exportInspectionsBtn" class="btn-secondary button">📥 Export Inspections</button>
         </div>
       </div>
 
@@ -225,6 +224,19 @@
   </div><!-- /appView -->
 
   <script src="admin.js"></script>
+
+  <!-- ERROR MODAL -->
+  <div id="errorModal" class="modal">
+    <div class="modal-content" style="max-width:400px; text-align:center;">
+      <div style="font-size: 3rem; margin-bottom: 15px;">⚠️</div>
+      <h2 style="margin-top:0;">Error</h2>
+      <p id="errorModalText" style="color:var(--text-2); margin-bottom: 25px;"></p>
+      <div class="modal-actions" style="justify-content: center;">
+        <button class="btn btn-primary" onclick="document.getElementById('errorModal').classList.remove('active')">Dismiss</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>
 

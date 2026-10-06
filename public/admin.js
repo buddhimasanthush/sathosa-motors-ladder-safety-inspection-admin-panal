@@ -12,6 +12,14 @@ let importedPreview = null;
 /* ─── Utility helpers ────────────────────────────────────── */
 const esc = str => String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const q = id => document.getElementById(id);
+
+function showErrorModal(msg) {
+  const el = q('errorModalText');
+  if (el) el.textContent = msg;
+  const modal = q('errorModal');
+  if (modal) modal.classList.add('active');
+}
+
 const show = el => el?.classList.remove('hidden');
 const hide = el => el?.classList.add('hidden');
 
@@ -109,7 +117,7 @@ async function loadQuestions() {
     renderQuestionsTable();
     updateQuestionCount();
   } catch (err) {
-    console.error('Failed to load questions:', err);
+    showErrorModal('Failed to load questions: ' + err.message);
   }
 }
 
@@ -291,7 +299,7 @@ async function toggleActive(id, newActive) {
     if (selectedQuestion?.id === id) editQuestion(id);
     setStatus(`Question ${newActive ? 'activated' : 'deactivated'}.`, 'ok');
   } catch (err) {
-    setStatus('Error: ' + err.message, 'err');
+    showErrorModal('Error: ' + err.message);
   }
 }
 
@@ -326,7 +334,7 @@ q('questionForm').addEventListener('submit', async e => {
       if (created) editQuestion(created.id);
     }
   } catch (err) {
-    setStatus('Error: ' + err.message, 'err');
+    showErrorModal('Error: ' + err.message);
   }
 });
 
@@ -475,8 +483,21 @@ window.toggleRecordDetails = async function(id, btn) {
 
 q('loadRecordsBtn').addEventListener('click', loadRecords);
 
-/* Export links need auth cookie — they work as direct links since we use sessions */
-/* The export URLs go through the server which checks requireAdmin */
+q('exportInspectionsBtn')?.addEventListener('click', () => {
+  const params = new URLSearchParams();
+  const from = q('filterFrom').value;
+  const to = q('filterTo').value;
+  const ladder = q('filterLadder').value.trim();
+  const inspector = q('filterInspector').value.trim();
+  const status = q('filterStatus').value;
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  if (ladder) params.set('ladder', ladder);
+  if (inspector) params.set('inspector', inspector);
+  if (status) params.set('status', status);
+  window.location.href = '/api/export/inspections?' + params.toString();
+});
+
 
 /* ─── Init ───────────────────────────────────────────────── */
 checkSession();
@@ -539,6 +560,6 @@ window.printRecord = async function(id) {
     printWindow.document.close();
     printWindow.focus();
   } catch(e) {
-    alert('Failed to print: ' + e.message);
+    showErrorModal('Failed to print: ' + e.message);
   }
 };

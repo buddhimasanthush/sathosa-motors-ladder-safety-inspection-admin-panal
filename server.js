@@ -155,13 +155,6 @@ app.post('/api/questions', requireAdmin, async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('begin');
-    if (q.display_order) {
-      await client.query('update inspection_points set display_order = display_order + 1 where display_order >= 
-  const q = req.body;
-  const client = await pool.connect();
-  try {
-    ', [q.display_order]);
-    }
     const { rows } = await client.query(
       `insert into inspection_points (category, question, question_type, display_order, is_required, is_active, allow_remarks)
        values ($1, $2, $3, $4, $5, $6, true)
@@ -184,27 +177,6 @@ app.put('/api/questions/:id', requireAdmin, async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('begin');
-    const { rows: curr } = await client.query('select display_order from inspection_points where id = 
-  const q = req.body;
-  const client = await pool.connect();
-  try {
-    ', [req.params.id]);
-    const currOrder = curr[0]?.display_order;
-    if (q.display_order && currOrder && q.display_order !== currOrder) {
-      if (q.display_order < currOrder) {
-        await client.query('update inspection_points set display_order = display_order + 1 where display_order >= 
-  const q = req.body;
-  const client = await pool.connect();
-  try {
-     and display_order < $2', [q.display_order, currOrder]);
-      } else {
-        await client.query('update inspection_points set display_order = display_order - 1 where display_order <= 
-  const q = req.body;
-  const client = await pool.connect();
-  try {
-     and display_order > $2', [q.display_order, currOrder]);
-      }
-    }
     await client.query(
       `update inspection_points
           set category=$1, question=$2, question_type=$3, display_order=$4,
@@ -244,7 +216,7 @@ app.get('/api/inspections', requireAdmin, async (req, res, next) => {
     const where = filters.length ? `where ${filters.join(' and ')}` : '';
     const { rows } = await pool.query(`
       select i.id, i.inspection_date, i.ladder_no, i.section, i.height_feet, i.ladder_type,
-             i.inspector_name, i.epf_number, i.overall_result, i.remarks, i.created_at,
+             i.inspector_name, i.overall_result, i.remarks, i.created_at,
              count(r.id)::int as answer_count,
              count(*) filter (where r.result = 'FAIL')::int as fail_count
         from inspections i
@@ -254,23 +226,6 @@ app.get('/api/inspections', requireAdmin, async (req, res, next) => {
        order by i.inspection_date desc, i.created_at desc
        limit 500
     `, values);
-    res.json(rows);
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get('/api/inspections/:id', requireAdmin, async (req, res, next) => {
-  try {
-    const { rows } = await pool.query(`
-      select r.display_order_snapshot as order,
-             r.category_snapshot as category,
-             r.question_text_snapshot as question,
-             r.result, r.result as answer_label, r.remarks
-        from inspection_results r
-       where r.inspection_id = $1
-       order by r.display_order_snapshot asc
-    `, [req.params.id]);
     res.json(rows);
   } catch (error) {
     next(error);
@@ -328,7 +283,7 @@ app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
              r.question_text_snapshot      as question,
              r.question_type_snapshot      as question_type,
              r.result                      as answer,
-             r.result as answer_label,
+             coalesce(r.answer_label, r.result) as answer_label,
              r.remarks                     as answer_remarks
         from inspections i
         left join inspection_results r on r.inspection_id = i.id
