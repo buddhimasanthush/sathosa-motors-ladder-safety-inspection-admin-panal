@@ -310,102 +310,113 @@ app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
     `, values);
 
     const inspectionsMap = new Map();
-    
-    rows.forEach(r => {
-      if (!inspectionsMap.has(r.inspection_id)) {
-        inspectionsMap.set(r.inspection_id, {
-          'Inspection ID': r.inspection_id,
-          'Date': r.inspection_date ? r.inspection_date.toISOString().split('T')[0] : '',
-          'Ladder No': r.ladder_no,
-          'Section/Location': r.section,
-          'Height (ft)': r.height_feet,
-          'Type': r.ladder_type,
-          'Inspector Name': r.inspector_name,
-          'EPF Number': r.epf_number,
-          'Overall Result': r.overall_result,
-          'Overall Remarks': r.overall_remarks
-        });
-      }
-      if (r.question) {
-        inspectionsMap.get(r.inspection_id)[r.question] = r.answer;
-        if (r.answer_remarks) {
-          inspectionsMap.get(r.inspection_id)[`${r.question} (Remarks)`] = r.answer_remarks;
-        }
-      }
-    });
-
-    const finalRows = Array.from(inspectionsMap.values());
-
-    let buffer;
-    try {
-      const templatePath = path.join(__dirname, 'template.xlsx');
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.readFile(templatePath);
-      const sheet = workbook.getWorksheet(1);
       
-      const headerRow6 = sheet.getRow(6);
-      const headerRow7 = sheet.getRow(7);
-      const headers = [];
-      const maxCols = Math.max(headerRow6.cellCount, headerRow7.cellCount, 40);
-      for (let i = 1; i <= maxCols; i++) {
-         let val = headerRow7.getCell(i).value;
-         if (val && typeof val === 'object' && val.richText) val = val.richText.map(t=>t.text).join('');
-         if (!val) {
-             val = headerRow6.getCell(i).value;
-             if (val && typeof val === 'object' && val.richText) val = val.richText.map(t=>t.text).join('');
-         }
-         headers[i] = typeof val === 'string' ? val.trim() : (val ? String(val).trim() : '');
-      }
-      
-      const styleRow = sheet.getRow(8);
-      
-      // Clear out any old dummy data baked into the template from row 8 onwards
-      const maxRowsToClear = Math.max(8 + finalRows.length, sheet.rowCount + 10);
-      for (let r = 8; r <= maxRowsToClear; r++) {
-          const clearRow = sheet.getRow(r);
-          clearRow.eachCell({ includeEmpty: true }, (cell) => {
-              cell.value = null; 
-              // Clear styles on rows 9+ so they don't have phantom borders
-              if (r > 8) {
-                  cell.style = {};
-              }
+      rows.forEach(r => {
+        if (!inspectionsMap.has(r.inspection_id)) {
+          inspectionsMap.set(r.inspection_id, {
+            'Inspection ID': r.inspection_id,
+            'Date': r.inspection_date ? r.inspection_date.toISOString().split('T')[0] : '',
+            'Ladder No.': r.ladder_no,
+            'Section': r.section,
+            'Feet': r.height_feet,
+            'Ladder Type (Step ladder/Extension ladder)': r.ladder_type,
+            'Inspector Name': r.inspector_name,
+            'EPF Number': r.epf_number,
+            'Overall Result': r.overall_result,
+            'Overall Remarks': r.overall_remarks
           });
-          if (r > 8) {
-              clearRow.commit();
-          }
-      }
-
-      finalRows.forEach((row, rowIndex) => {
-        const excelRowNumber = 8 + rowIndex;
-        const excelRow = sheet.getRow(excelRowNumber);
-        
-        headers.forEach((h, colNumber) => {
-          if (!h) return;
-          const targetCell = excelRow.getCell(colNumber);
-          
-          // Copy style from row 8 to preserve borders and formatting
-          targetCell.style = Object.assign({}, styleRow.getCell(colNumber).style);
-          
-          if (h === 'Ladder No.') targetCell.value = row['Ladder No'] || '';
-          else if (h === 'Section') targetCell.value = row['Section/Location'] || '';
-          else if (h === 'Feet') targetCell.value = row['Height (ft)'] || '';
-          else if (h === 'Ladder Type (Step ladder/Extension ladder)') targetCell.value = row['Type'] || '';
-          else {
-              const cleanH = h.replace(/\s+/g, ' ').replace(/[?]/g, '').trim().toLowerCase();
-              let matchedVal = '';
-              for (const [key, val] of Object.entries(row)) {
-                  if (key.replace(/\s+/g, ' ').replace(/[?]/g, '').trim().toLowerCase() === cleanH) {
-                      matchedVal = val;
-                      break;
-                  }
-              }
-              targetCell.value = matchedVal || '';
-            }
-        });
-        excelRow.commit();
+        }
+        if (r.question) {
+          // Store question with category prefix
+          const cat = r.category || '';
+          inspectionsMap.get(r.inspection_id)[`${cat}:::${r.question}`] = r.answer;
+        }
       });
-      
-      buffer = await workbook.xlsx.writeBuffer();
+  
+      const finalRows = Array.from(inspectionsMap.values());
+  
+      let buffer;
+      try {
+        const templatePath = path.join(__dirname, 'template.xlsx');
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(templatePath);
+        const sheet = workbook.getWorksheet(1);
+        
+        const headerRow6 = sheet.getRow(6);
+        const headerRow7 = sheet.getRow(7);
+        const headers = [];
+        const categories = [];
+        const maxCols = Math.max(headerRow6.cellCount, headerRow7.cellCount, 40);
+        
+        for (let i = 1; i <= maxCols; i++) {
+           let catVal = headerRow6.getCell(i).value;
+           if (catVal && typeof catVal === 'object' && catVal.richText) catVal = catVal.richText.map(t=>t.text).join('');
+           categories[i] = typeof catVal === 'string' ? catVal.trim().toLowerCase() : '';
+
+           let val = headerRow7.getCell(i).value;
+           if (val && typeof val === 'object' && val.richText) val = val.richText.map(t=>t.text).join('');
+           if (!val) {
+               val = headerRow6.getCell(i).value;
+               if (val && typeof val === 'object' && val.richText) val = val.richText.map(t=>t.text).join('');
+           }
+           headers[i] = typeof val === 'string' ? val.trim() : (val ? String(val).trim() : '');
+        }
+        
+        const styleRow = sheet.getRow(8);
+        
+        // Clear out any old dummy data baked into the template from row 8 onwards
+        const maxRowsToClear = Math.max(8 + finalRows.length, sheet.rowCount + 10);
+        for (let r = 8; r <= maxRowsToClear; r++) {
+            const clearRow = sheet.getRow(r);
+            clearRow.eachCell({ includeEmpty: true }, (cell) => {
+                cell.value = null; 
+                if (r > 8) cell.style = {};
+            });
+            if (r > 8) clearRow.commit();
+        }
+  
+        finalRows.forEach((row, rowIndex) => {
+          const excelRowNumber = 8 + rowIndex;
+          const excelRow = sheet.getRow(excelRowNumber);
+          
+          headers.forEach((h, colNumber) => {
+            if (!h) return;
+            const targetCell = excelRow.getCell(colNumber);
+            
+            // Copy style from row 8 to preserve borders and formatting
+            targetCell.style = Object.assign({}, styleRow.getCell(colNumber).style);
+            
+            const cleanH = h.replace(/\s+/g, ' ').replace(/[?]/g, '').trim().toLowerCase();
+            const excelCat = categories[colNumber] || '';
+            
+            let matchedVal = '';
+            for (const [key, val] of Object.entries(row)) {
+                if (key.includes(':::')) {
+                    const [dbCat, dbQuestion] = key.split(':::');
+                    const cleanDbCat = dbCat.replace(/\s+/g, ' ').trim().toLowerCase();
+                    const cleanDbQuestion = dbQuestion.replace(/\s+/g, ' ').replace(/[?]/g, '').trim().toLowerCase();
+                    
+                    if (cleanDbQuestion === cleanH) {
+                        // Enforce category match if Excel column has a category header
+                        if (excelCat.includes('extension') && !cleanDbCat.includes('extension')) continue;
+                        if (excelCat.includes('step') && !cleanDbCat.includes('step')) continue;
+                        
+                        matchedVal = val;
+                        break;
+                    }
+                } else {
+                    if (key.replace(/\s+/g, ' ').replace(/[?]/g, '').trim().toLowerCase() === cleanH) {
+                        matchedVal = val;
+                        break;
+                    }
+                }
+            }
+            targetCell.value = matchedVal || '';
+          });
+          excelRow.commit();
+        });
+        
+        buffer = await workbook.xlsx.writeBuffer();
     } catch (tmplErr) {
       console.error(tmplErr);
       const workbook = XLSX.utils.book_new();
