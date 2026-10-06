@@ -10,6 +10,7 @@
   "dependencies": {
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.2.3",
+    "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "multer": "^2.0.2",
     "pg": "^8.16.3",

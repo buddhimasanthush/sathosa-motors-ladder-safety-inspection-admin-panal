@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import ExcelJS from 'exceljs';
+import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -155,9 +157,6 @@ app.post('/api/questions', requireAdmin, async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('begin');
-    if (q.display_order) {
-      await client.query('update inspection_points set display_order = display_order + 1 where display_order >= $1', [q.display_order]);
-    }
     const { rows } = await client.query(
       `insert into inspection_points (category, question, question_type, display_order, is_required, is_active, allow_remarks)
        values ($1, $2, $3, $4, $5, $6, true)
@@ -180,15 +179,6 @@ app.put('/api/questions/:id', requireAdmin, async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('begin');
-    const { rows: curr } = await client.query('select display_order from inspection_points where id = $1', [req.params.id]);
-    const currOrder = curr[0]?.display_order;
-    if (q.display_order && currOrder && q.display_order !== currOrder) {
-      if (q.display_order < currOrder) {
-        await client.query('update inspection_points set display_order = display_order + 1 where display_order >= $1 and display_order < $2', [q.display_order, currOrder]);
-      } else {
-        await client.query('update inspection_points set display_order = display_order - 1 where display_order <= $1 and display_order > $2', [q.display_order, currOrder]);
-      }
-    }
     await client.query(
       `update inspection_points
           set category=$1, question=$2, question_type=$3, display_order=$4,
@@ -228,7 +218,7 @@ app.get('/api/inspections', requireAdmin, async (req, res, next) => {
     const where = filters.length ? `where ${filters.join(' and ')}` : '';
     const { rows } = await pool.query(`
       select i.id, i.inspection_date, i.ladder_no, i.section, i.height_feet, i.ladder_type,
-             i.inspector_name, i.epf_number, i.overall_result, i.remarks, i.created_at,
+             i.inspector_name, i.overall_result, i.remarks, i.created_at,
              count(r.id)::int as answer_count,
              count(*) filter (where r.result = 'FAIL')::int as fail_count
         from inspections i
@@ -346,197 +336,64 @@ app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
 
     const finalRows = Array.from(inspectionsMap.values());
 
-    // LOAD TEMPLATE
-    let workbook;
+    let buffer;
     try {
       const templatePath = path.join(__dirname, 'template.xlsx');
-      const templateBuffer = fs.readFileSync(templatePath);
-      workbook = XLSX.read(templateBuffer, { type: 'buffer' });
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(templatePath);
+      const sheet = workbook.getWorksheet(1);
       
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
+      const headerRow = sheet.getRow(7);
+      const headers = [];
+      headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          headers[colNumber] = cell.value; 
+      });
       
-      const templateRows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-      const headers = templateRows[6] || []; 
-      
-      const mappedData = finalRows.map(row => {
-        const arr = [];
-        headers.forEach((header, i) => {
-          if (!header) return arr.push('');
-          const h = header.trim();
-          if (h === 'Ladder No.') arr[i] = row['Ladder No'] || '';
-          else if (h === 'Section') arr[i] = row['Section/Location'] || '';
-          else if (h === 'Feet') arr[i] = row['Height (ft)'] || '';
-          else if (h === 'Ladder Type (Step ladder/Extension ladder)') arr[i] = row['Type'] || '';
+      finalRows.forEach((row, rowIndex) => {
+        const excelRowNumber = 8 + rowIndex;
+        // In exceljs we can just get the row and it creates it if it doesn't exist
+        const excelRow = sheet.getRow(excelRowNumber);
+        
+        headers.forEach((header, colNumber) => {
+          if (!header) return;
+          const h = header.toString().trim();
+          if (h === 'Ladder No.') excelRow.getCell(colNumber).value = row['Ladder No'] || '';
+          else if (h === 'Section') excelRow.getCell(colNumber).value = row['Section/Location'] || '';
+          else if (h === 'Feet') excelRow.getCell(colNumber).value = row['Height (ft)'] || '';
+          else if (h === 'Ladder Type (Step ladder/Extension ladder)') excelRow.getCell(colNumber).value = row['Type'] || '';
           else {
-            arr[i] = row[h] || '';
+            excelRow.getCell(colNumber).value = row[h] || '';
           }
         });
-        // Append missing metadata
-        arr[28] = row['Date'] || '';
-        arr[29] = row['Inspector Name'] || '';
-        arr[30] = row['EPF Number'] || '';
-        arr[31] = row['Overall Result'] || '';
-        arr[32] = row['Overall Remarks'] || '';
-        return arr;
+
+        // Add additional metadata columns starting at AC (column 29)
+        excelRow.getCell(29).value = row['Date'] || '';
+        excelRow.getCell(30).value = row['Inspector Name'] || '';
+        excelRow.getCell(31).value = row['EPF Number'] || '';
+        excelRow.getCell(32).value = row['Overall Result'] || '';
+        excelRow.getCell(33).value = row['Overall Remarks'] || '';
+        excelRow.commit();
       });
 
-      sheet['AC7'] = { v: 'Date', t: 's' };
-      sheet['AD7'] = { v: 'Inspector Name', t: 's' };
-      sheet['AE7'] = { v: 'EPF Number', t: 's' };
-      sheet['AF7'] = { v: 'Overall Result', t: 's' };
-      sheet['AG7'] = { v: 'Overall Remarks', t: 's' };
+      // Write headers for the extra metadata on row 7
+      sheet.getCell(7, 29).value = 'Date';
+      sheet.getCell(7, 30).value = 'Inspector Name';
+      sheet.getCell(7, 31).value = 'EPF Number';
+      sheet.getCell(7, 32).value = 'Overall Result';
+      sheet.getCell(7, 33).value = 'Overall Remarks';
       
-      sheet['!ref'] = 'A1:AG' + (7 + Math.max(1, mappedData.length));
-      
-      XLSX.utils.sheet_add_aoa(sheet, mappedData, { origin: "A8" });
+      buffer = await workbook.xlsx.writeBuffer();
     } catch (tmplErr) {
       console.error(tmplErr);
-      workbook = XLSX.utils.book_new();
+      // Fallback if template is broken
+      const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(finalRows.length ? finalRows : [{ note: 'No records found' }]), 'Inspection Results');
+      buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
     }
 
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="LADDER-CHECKLIST-EXPORT.xlsx"');
     res.send(buffer);
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get('/api/export/questionnaire', requireAdmin, async (req, res, next) => {
-  try {
-    const questions = await getQuestions();
-    const rows = questions.map(q => ({
-      'Question Number': q.display_order,
-      Section: q.category,
-      Question: q.question,
-      'Question Type': q.question_type,
-      Required: q.is_required ? 'yes' : 'no',
-      Active: q.is_active ? 'yes' : 'no',
-      Options: q.options.map(o => `${o.option_label}=${o.option_value}${o.is_fail_value ? ':fail' : ''}`).join('|'),
-    }));
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), 'Questionnaire');
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="questionnaire.xlsx"');
-    res.send(buffer);
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
-  try {
-    // Apply optional query filters
-    const filters = [];
-    const values = [];
-    if (req.query.from)      { values.push(req.query.from);          filters.push(`i.inspection_date >= $${values.length}`); }
-    if (req.query.to)        { values.push(req.query.to);            filters.push(`i.inspection_date <= $${values.length}`); }
-    if (req.query.ladder)    { values.push(`%${req.query.ladder}%`); filters.push(`i.ladder_no ilike $${values.length}`); }
-    if (req.query.inspector) { values.push(`%${req.query.inspector}%`); filters.push(`i.inspector_name ilike $${values.length}`); }
-    if (req.query.status)    { values.push(req.query.status);        filters.push(`i.overall_result = $${values.length}`); }
-    const where = filters.length ? `where ${filters.join(' and ')}` : '';
-
-    const { rows } = await pool.query(`
-      select i.id as inspection_id,
-             i.inspection_date,
-             i.ladder_no,
-             i.section,
-             i.height_feet,
-             i.ladder_type,
-             i.inspector_name,
-             i.overall_result,
-             i.remarks                     as overall_remarks,
-             i.created_at,
-             r.display_order_snapshot      as question_number,
-             r.category_snapshot           as question_section,
-             r.question_text_snapshot      as question,
-             r.question_type_snapshot      as question_type,
-             r.result                      as answer,
-             coalesce(r.answer_label, r.result) as answer_label,
-             r.remarks                     as answer_remarks
-        from inspections i
-        left join inspection_results r on r.inspection_id = i.id
-        ${where}
-       order by i.inspection_date desc, i.created_at desc, r.display_order_snapshot asc
-    `, values);
-    // Pivot data so each inspection is one row
-    const inspectionsMap = new Map();
-    
-    rows.forEach(r => {
-      if (!inspectionsMap.has(r.inspection_id)) {
-        inspectionsMap.set(r.inspection_id, {
-          'Inspection ID': r.inspection_id,
-          'Date': r.inspection_date,
-          'Ladder No': r.ladder_no,
-          'Section/Location': r.section,
-          'Height (ft)': r.height_feet,
-          'Ladder Type': r.ladder_type,
-          'Inspector Name': r.inspector_name,
-          'Overall Result': r.overall_result,
-          'Overall Remarks': r.overall_remarks
-        });
-      }
-      
-      if (r.question) {
-        const qKey = `Q${r.question_number}: ${r.question}`;
-        const ins = inspectionsMap.get(r.inspection_id);
-        ins[qKey] = r.answer_label;
-        if (r.answer_remarks) {
-          ins[`${qKey} (Remarks)`] = r.answer_remarks;
-        }
-      }
-    });
-
-    const finalRows = Array.from(inspectionsMap.values());
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(finalRows.length ? finalRows : [{ note: 'No records found' }]), 'Inspection Results');
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="inspection-records.xlsx"');
-    res.send(buffer);
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post('/api/import/questionnaire', requireAdmin, upload.single('file'), async (req, res, next) => {
-  try {
-    if (!req.file) return res.status(400).json({ errors: ['No Excel file uploaded.'] });
-    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-    const questions = rows.map(normalizeQuestion);
-    const errors = validateQuestions(questions);
-    if (errors.length || req.body.confirm !== 'true') {
-      return res.json({ preview: questions, errors });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('begin');
-      await client.query('update inspection_points set is_active=false, updated_at=now() where is_active=true');
-      for (const q of questions) {
-        const { rows: inserted } = await client.query(
-          `insert into inspection_points (category, question, question_type, display_order, is_required, is_active, allow_remarks)
-           values ($1, $2, $3, $4, $5, $6, true)
-           returning id`,
-          [q.category, q.question, q.question_type, q.display_order, q.is_required, q.is_active],
-        );
-        await replaceOptions(client, inserted[0].id, q.options);
-      }
-      await client.query('commit');
-      res.json({ imported: questions.length, errors: [] });
-    } catch (error) {
-      await client.query('rollback');
-      throw error;
-    } finally {
-      client.release();
-    }
   } catch (error) {
     next(error);
   }
