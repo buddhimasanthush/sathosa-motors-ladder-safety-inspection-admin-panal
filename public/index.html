@@ -28,6 +28,24 @@
     </form>
   </main>
 
+  <!-- ══════════════════════ MODE SELECT ══════════════════════ -->
+  <main id="modeSelectView" class="login-view hidden">
+    <div class="login-panel" style="max-width: 500px;">
+      <div class="login-logo">⚙️</div>
+      <h1>Select Module</h1>
+      <p>Sathosa Motors · HSE Admin Panel</p>
+      
+      <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">
+        <button id="btnModeLadder" class="btn-primary" style="padding: 20px; font-size: 1.1rem; justify-content: center; background: var(--bg); border: 2px solid var(--border); color: var(--text-1); cursor: pointer;">
+          🪜 Ladder Inspection Admin
+        </button>
+        <button id="btnModeFire" class="btn-primary" style="padding: 20px; font-size: 1.1rem; justify-content: center; background: var(--bg); border: 2px solid var(--border); color: var(--text-1); cursor: pointer;">
+          🧯 Fire Extinguisher Admin
+        </button>
+      </div>
+    </div>
+  </main>
+
   <!-- ══════════════════════ APP ══════════════════════ -->
   <div id="appView" class="app-view hidden">
 
@@ -37,10 +55,17 @@
         <div class="topbar-icon">🪜</div>
         <div>
           <h1>Safety Inspection Admin</h1>
-          <div class="sub">Sathosa Motors · SML/HSE/CL/10</div>
+          <div class="sub">Sathosa Motors</div>
+          <select id="adminModeSelector" style="margin-top: 5px; font-size: 0.85rem; padding: 2px; border-radius: 4px; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2);">
+            <option value="ladder" style="color: black;">Ladder Inspections</option>
+            <option value="fire" style="color: black;">Fire Extinguisher</option>
+          </select>
         </div>
       </div>
       <div class="topbar-right">
+        <button id="homeBtn" type="button" class="btn-secondary btn-sm" style="color:white;border-color:rgba(255,255,255,0.15);background:rgba(255,255,255,0.1); margin-right: 10px;">
+          🏠 Home
+        </button>
         <button id="logoutBtn" type="button" class="btn-secondary btn-sm" style="color:#94a3b8;border-color:rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);">
           Sign Out
         </button>
@@ -103,6 +128,7 @@
               <label for="category">Section</label>
               <select id="category">
                 <option value="general">🔧 General</option>
+                <option value="fire_extinguisher">🧯 Fire Extinguisher</option>
                 <option value="extension">🔄 Extension</option>
                 <option value="step">🪜 Step</option>
               </select>
@@ -207,9 +233,9 @@
           <thead>
             <tr>
               <th>Date</th>
-              <th>Ladder / Location</th>
+              <th>Point No / Location</th>
               <th>Inspector / EPF</th>
-              <th>Type / Height</th>
+              <th>Type / Height / Qty</th>
               <th>Result</th>
               <th>Answers</th>
               <th>Actions</th>
@@ -224,7 +250,7 @@
 
   </div><!-- /appView -->
 
-  <script src="admin.js?v=1791266489079"></script>
+  <script src="admin.js?v=1791266489082"></script>
 
   <!-- ERROR MODAL -->
   <div id="errorModal" class="modal">

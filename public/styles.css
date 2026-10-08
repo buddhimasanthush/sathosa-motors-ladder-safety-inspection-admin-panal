@@ -822,3 +822,37 @@ button, .button, a.button {
   .filters input, .filters select { min-width: unset; width: 100%; }
   .stats-row { grid-template-columns: 1fr 1fr; }
 }
+
+/* ─── Modal ─────────────────────────────────────────── */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.modal.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-content {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  padding: 30px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: var(--shadow-lg);
+  transform: translateY(20px);
+  transition: transform 0.2s ease;
+}
+
+.modal.active .modal-content {
+  transform: translateY(0);
+}

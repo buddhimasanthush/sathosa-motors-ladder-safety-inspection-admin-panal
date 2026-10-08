@@ -9,6 +9,12 @@ let questions = [];
 let selectedQuestion = null;
 let importedPreview = null;
 
+
+document.getElementById('adminModeSelector')?.addEventListener('change', (e) => {
+  showApp(e.target.value);
+});
+
+
 /* ─── Utility helpers ────────────────────────────────────── */
 const esc = str => String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const q = id => document.getElementById(id);
@@ -23,9 +29,20 @@ function showErrorModal(msg) {
 const show = el => el?.classList.remove('hidden');
 const hide = el => el?.classList.add('hidden');
 
+function showErrorModal(msg) {
+  const modal = document.getElementById('errorModal');
+  const text = document.getElementById('errorModalText');
+  if (modal && text) {
+    text.textContent = msg;
+    modal.classList.add('active');
+  } else {
+    alert('Error: ' + msg);
+  }
+}
+
 function sectionBadge(s) {
-  const cls = { general: 'badge-section-general', extension: 'badge-section-extension', step: 'badge-section-step' };
-  const lbl = { general: 'General', extension: 'Extension', step: 'Step' };
+  const cls = { general: 'badge-section-general', extension: 'badge-section-extension', step: 'badge-section-step', fire_extinguisher: 'badge-section-general' };
+  const lbl = { general: 'General', extension: 'Extension', step: 'Step', fire_extinguisher: 'Fire Ext.' };
   return `<span class="badge ${cls[s] || 'badge-inactive'}">${lbl[s] || s}</span>`;
 }
 
@@ -54,7 +71,7 @@ async function checkSession() {
   try {
     const d = await api('GET', '/session');
     if (d.authenticated) {
-      showApp();
+      showModeSelect();
     } else {
       showLogin();
     }
@@ -65,13 +82,32 @@ async function checkSession() {
 
 function showLogin() {
   hide(q('appView'));
+  const m = q('modeSelectView'); if (m) hide(m);
   show(q('loginView'));
 }
 
-function showApp() {
+function showModeSelect() {
   hide(q('loginView'));
+  hide(q('appView'));
+  const m = q('modeSelectView'); if (m) show(m);
+}
+
+function showApp(mode) {
+  window.adminMode = mode || 'ladder';
+  if (q('adminModeSelector')) {
+    q('adminModeSelector').value = window.adminMode;
+  }
+  const sub = document.querySelector('.topbar-brand .sub');
+  if (sub) {
+    sub.textContent = window.adminMode === 'fire' ? 'Sathosa Motors · Fire Extinguisher Admin' : 'Sathosa Motors · Ladder Inspection Admin';
+  }
+  hide(q('loginView'));
+  const m = q('modeSelectView'); if (m) hide(m);
   show(q('appView'));
   loadQuestions();
+  
+  const qTab = document.querySelector('.tab[data-tab="questions"]');
+  if (qTab) qTab.click();
 }
 
 q('loginForm').addEventListener('submit', async e => {
@@ -82,10 +118,14 @@ q('loginForm').addEventListener('submit', async e => {
   try {
     await api('POST', '/login', { password: pw });
     q('password').value = '';
-    showApp();
+    showModeSelect();
   } catch (err) {
     errEl.textContent = err.message === 'Invalid password' ? 'Incorrect password. Try again.' : err.message;
   }
+});
+
+q('homeBtn')?.addEventListener('click', () => {
+  showModeSelect();
 });
 
 q('logoutBtn').addEventListener('click', async () => {
@@ -113,7 +153,7 @@ document.querySelectorAll('.tab').forEach(btn => {
    ═══════════════════════════════════════════════════════════ */
 async function loadQuestions() {
   try {
-    questions = await api('GET', '/questions');
+    questions = await api('GET', `/questions?mode=${window.adminMode}`);
     renderQuestionsTable();
     updateQuestionCount();
   } catch (err) {
@@ -124,7 +164,7 @@ async function loadQuestions() {
 function updateQuestionCount() {
   const active = questions.filter(q => q.is_active).length;
   const total = questions.length;
-  q('questionCount').textContent = `${active} active · ${total} total questions`;
+  if (q('questionCount')) q('questionCount').textContent = `${active} active · ${total} total questions`;
 }
 
 function renderQuestionsTable() {
@@ -137,7 +177,7 @@ function renderQuestionsTable() {
   tbody.innerHTML = questions.map(item => `
     <tr class="${selectedQuestion?.id === item.id ? 'selected' : ''}" data-id="${item.id}" style="cursor:pointer;">
       <td class="mono" style="color:var(--text-2); width:56px;">${item.display_order}</td>
-      <td>${sectionBadge(item.category)}</td>
+      <td>${item.category === 'fire_extinguisher' ? '<span class="badge badge-section-general">Fire Ext</span>' : sectionBadge(item.category)}</td>
       <td><div class="q-text" title="${esc(item.question)}">${esc(item.question)}</div></td>
       <td style="white-space:nowrap;">${typeBadge(item.question_type)}</td>
       <td>${item.is_required ? '<span class="badge badge-required">Req</span>' : '<span style="color:var(--text-3);font-size:0.78rem;">opt</span>'}</td>
@@ -165,7 +205,7 @@ function renderQuestionsTable() {
 /* ─── Question Form ──────────────────────────────────────── */
 function resetForm() {
   selectedQuestion = null;
-  q('editorTitle').textContent = 'Add Question';
+  if (q('editorTitle')) q('editorTitle').textContent = 'Add Question';
   q('questionId').value = '';
   q('questionText').value = '';
   q('category').value = 'general';
@@ -178,7 +218,7 @@ function resetForm() {
     { option_label: 'FAIL', option_value: 'FAIL', is_fail_value: true },
     
   ]);
-  q('formStatus').textContent = '';
+  if (q('formStatus')) q('formStatus').textContent = '';
   q('formStatus').className = 'status-msg';
   q('deactivateBtn').style.display = 'none';
   q('questionText').focus();
@@ -189,7 +229,7 @@ function editQuestion(id) {
   const q_item = questions.find(x => x.id === id);
   if (!q_item) return;
   selectedQuestion = q_item;
-  q('editorTitle').textContent = 'Edit Question';
+  if (q('editorTitle')) q('editorTitle').textContent = 'Edit Question';
   q('questionId').value = q_item.id;
   q('questionText').value = q_item.question;
   q('category').value = q_item.category;
@@ -198,10 +238,10 @@ function editQuestion(id) {
   q('required').checked = q_item.is_required;
   q('active').checked = q_item.is_active;
   renderOptionsEditor(q_item.options || []);
-  q('formStatus').textContent = '';
+  if (q('formStatus')) q('formStatus').textContent = '';
   q('formStatus').className = 'status-msg';
   q('deactivateBtn').style.display = '';
-  q('deactivateBtn').textContent = q_item.is_active ? '🔇 Deactivate' : '✅ Activate';
+  if (q('deactivateBtn')) q('deactivateBtn').textContent = q_item.is_active ? '🔇 Deactivate' : '✅ Activate';
   renderQuestionsTable();
   q('questionForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -275,8 +315,10 @@ function getFormData() {
 
 function setStatus(msg, type = 'ok') {
   const el = q('formStatus');
-  el.textContent = msg;
-  el.className = `status-msg ${type}`;
+  if (el) {
+    el.textContent = msg;
+    el.className = `status-msg ${type}`;
+  }
 }
 
 q('newQuestionBtn').addEventListener('click', resetForm);
@@ -348,7 +390,10 @@ function renderPreview() {
     return;
   }
 
-  const sections = [
+  const sections = window.adminMode === 'fire' ? [
+    { key: 'general',           label: '🔧 General Inspection Points', icon: '🔧' },
+    { key: 'fire_extinguisher', label: '🧯 Fire Extinguisher Specific', icon: '🧯' }
+  ] : [
     { key: 'general',   label: '🔧 General Inspection Points', icon: '🔧' },
     { key: 'extension', label: '🔄 Extension Ladder Specific', icon: '🔄' },
     { key: 'step',      label: '🪜 Step Ladder Specific',      icon: '🪜' },
@@ -395,6 +440,7 @@ async function loadRecords() {
   tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-3);">Loading...</td></tr>`;
 
   try {
+    params.set('mode', window.adminMode);
     const records = await api('GET', '/inspections?' + params);
     window.currentRecords = records;
     renderRecords(records);
@@ -429,7 +475,7 @@ function renderRecords(records) {
       <td class="mono" style="white-space:nowrap;">${r.inspection_date || '—'}</td>
       <td><strong>${esc(r.ladder_no)}</strong><br><span style="font-size:0.78rem;color:var(--text-2);">${esc(r.section)}</span></td>
       <td>${esc(r.inspector_name)}<br><span style="font-size:0.78rem;color:var(--text-2);">EPF: ${esc(r.epf_number)}</span></td>
-      <td style="text-transform:capitalize;">${esc(r.ladder_type)}<br><span style="font-size:0.78rem;color:var(--text-2);">${r.height_feet} ft</span></td>
+      <td style="text-transform:capitalize;">${esc(r.ladder_type)}<br><span style="font-size:0.78rem;color:var(--text-2);">${window.adminMode === 'fire' ? r.height_feet : r.height_feet + ' ft'}${window.adminMode === 'fire' && r.pressure_weight ? ' (' + esc(r.pressure_weight) + ')' : ''}</span></td>
       <td><span class="badge ${r.overall_result === 'PASS' ? 'badge-pass' : 'badge-fail'}">${r.overall_result}</span></td>
       <td class="mono" style="font-size:0.8rem;">${r.answer_count ?? '—'} / ${r.fail_count > 0 ? `<span style="color:var(--fail);">${r.fail_count} fail</span>` : '<span style="color:var(--pass);">0 fail</span>'}</td>
       <td>
@@ -458,7 +504,7 @@ window.toggleRecordDetails = async function(id, btn) {
   if (content.dataset.loaded) return;
   content.innerHTML = 'Loading answers...';
   try {
-    const answers = await api('GET', `/inspections/${id}`);
+    const answers = await api('GET', `/inspections/${id}?mode=${window.adminMode}`);
     content.innerHTML = `<table style="width:100%; font-size:0.85rem; margin:0; background:transparent;">
       <thead>
         <tr><th style="padding:6px;border-bottom:1px solid var(--border);text-align:left;">#</th><th style="padding:6px;border-bottom:1px solid var(--border);text-align:left;">Section</th><th style="padding:6px;border-bottom:1px solid var(--border);text-align:left;">Question</th><th style="padding:6px;border-bottom:1px solid var(--border);text-align:left;">Result</th><th style="padding:6px;border-bottom:1px solid var(--border);text-align:left;">Remarks</th></tr>
@@ -496,9 +542,9 @@ q('exportPdfBtn')?.addEventListener('click', () => {
     content += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">';
     content += '<tr style="background-color: #f3f4f6; border-bottom: 2px solid #d1d5db; text-align: left;">';
     content += '<th style="padding: 10px;">Date</th>';
-    content += '<th style="padding: 10px;">Ladder / Location</th>';
+    content += '<th style="padding: 10px;">' + (window.adminMode === 'fire' ? 'Point No / Location' : 'Ladder / Location') + '</th>';
     content += '<th style="padding: 10px;">Inspector / EPF</th>';
-    content += '<th style="padding: 10px;">Type / Height</th>';
+    content += '<th style="padding: 10px;">' + (window.adminMode === 'fire' ? 'Type / Qty' : 'Type / Height') + '</th>';
     content += '<th style="padding: 10px;">Result</th>';
     content += '<th style="padding: 10px;">Answers</th>';
     content += '</tr>';
@@ -545,6 +591,7 @@ q('exportInspectionsBtn')?.addEventListener('click', () => {
   if (ladder) params.set('ladder', ladder);
   if (inspector) params.set('inspector', inspector);
   if (status) params.set('status', status);
+  params.set('mode', window.adminMode || 'ladder');
   window.location.href = '/api/export/inspections?' + params.toString();
 });
 
@@ -564,7 +611,7 @@ window.printRecord = async function(id) {
       content += '<div><h2 style="margin: 0 0 10px 0;">Inspection Report</h2>';
       content += '<p style="margin: 3px 0;"><strong>Ladder No.:</strong> ' + (r.ladder_no || 'N/A') + '</p>';
       content += '<p style="margin: 3px 0;"><strong>Type:</strong> ' + (r.ladder_type || 'N/A') + '</p>';
-      content += '<p style="margin: 3px 0;"><strong>Height:</strong> ' + (r.height_feet || 0) + ' ft</p></div>';
+      content += '<p style="margin: 3px 0;"><strong>' + (window.adminMode === 'fire' ? 'Quantity:' : 'Height:') + '</strong> ' + (r.height_feet || 0) + (window.adminMode === 'fire' ? '' : ' ft') + (window.adminMode === 'fire' && r.pressure_weight ? ' (' + esc(r.pressure_weight) + ')' : '') + '</p></div>';
       content += '<div style="text-align: right;">';
       content += '<p style="margin: 3px 0;"><strong>Date:</strong> ' + (r.inspection_date ? r.inspection_date.split('T')[0] : 'N/A') + '</p>';
       content += '<p style="margin: 3px 0;"><strong>Inspector:</strong> ' + (r.inspector_name || 'N/A') + '</p>';
@@ -607,3 +654,7 @@ window.printRecord = async function(id) {
     showErrorModal('Failed to export PDF: ' + e.message);
   }
 };
+
+/* ── Mode Selection Buttons ── */
+if (q('btnModeLadder')) q('btnModeLadder').addEventListener('click', () => showApp('ladder'));
+if (q('btnModeFire')) q('btnModeFire').addEventListener('click', () => showApp('fire'));
