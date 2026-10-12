@@ -3,9 +3,36 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "main": "main.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "electron .",
+    "dev": "electron .",
+    "build": "electron-builder build --win",
+    "pack": "electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.sathosamotors.safetyinspection",
+    "productName": "Safety Inspection Admin",
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "extraResources": [
+      {
+        "from": ".env",
+        "to": ".env"
+      }
+    ],
+    "files": [
+      "**/*",
+      "!.env.example"
+    ]
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
@@ -15,5 +42,9 @@
     "multer": "^2.0.2",
     "pg": "^8.16.3",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
   }
 }
