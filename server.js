@@ -1,4 +1,4 @@
-import 'dotenv/config';
+// dotenv loaded externally
 import ExcelJS from 'exceljs';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
@@ -382,7 +382,7 @@ app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
     const dataRows = Array.from(inspectionsMap.values());
     
     const templateName = isFire ? "Fire Extinguisher Inspection Record Sheet.xlsx" : "questionnaire (7).xlsx";
-    const templatePath = path.join(process.cwd(), templateName);
+    const templatePath = path.join(__dirname, templateName);
 
     try {
       const workbook = new ExcelJS.Workbook();

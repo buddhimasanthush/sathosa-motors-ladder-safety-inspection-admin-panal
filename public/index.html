@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Safety Inspection Admin | SML/HSE</title>
   <meta name="description" content="Admin panel for managing the Sathosa Motors safety inspection questionnaire and records.">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=3">
   <!-- Favicon inline emoji -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪜</text></svg>">
 </head>
@@ -52,21 +52,21 @@
     <!-- Top Bar -->
     <header class="topbar">
       <div class="topbar-brand">
-        <div class="topbar-icon">🪜</div>
+        <div id="topbarIcon" class="topbar-icon">🪜</div>
         <div>
           <h1>Safety Inspection Admin</h1>
           <div class="sub">Sathosa Motors</div>
-          <select id="adminModeSelector" style="margin-top: 5px; font-size: 0.85rem; padding: 2px; border-radius: 4px; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2);">
-            <option value="ladder" style="color: black;">Ladder Inspections</option>
-            <option value="fire" style="color: black;">Fire Extinguisher</option>
-          </select>
+
         </div>
       </div>
       <div class="topbar-right">
-        <button id="homeBtn" type="button" class="btn-secondary btn-sm" style="color:white;border-color:rgba(255,255,255,0.15);background:rgba(255,255,255,0.1); margin-right: 10px;">
+        <button id="themeToggleBtn" type="button" class="btn-secondary btn-sm" style="color:var(--text);border-color:var(--border-2);background:var(--surface); margin-right: 10px;">
+          🌙
+        </button>
+        <button id="homeBtn" type="button" class="btn-secondary btn-sm" style="color:var(--text);border-color:var(--border-2);background:var(--surface); margin-right: 10px; min-width: 80px;">
           🏠 Home
         </button>
-        <button id="logoutBtn" type="button" class="btn-secondary btn-sm" style="color:#94a3b8;border-color:rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);">
+        <button id="logoutBtn" type="button" class="btn-secondary btn-sm" style="color:var(--fail);border-color:var(--border-2);background:var(--surface);">
           Sign Out
         </button>
       </div>
@@ -233,9 +233,9 @@
           <thead>
             <tr>
               <th>Date</th>
-              <th>Point No / Location</th>
+              <th id="thLocation">Point No / Location</th>
               <th>Inspector / EPF</th>
-              <th>Type / Height / Qty</th>
+              <th id="thType">Type / Height / Qty</th>
               <th>Result</th>
               <th>Answers</th>
               <th>Actions</th>

@@ -101,6 +101,17 @@ function showApp(mode) {
   if (sub) {
     sub.textContent = window.adminMode === 'fire' ? 'Sathosa Motors · Fire Extinguisher Admin' : 'Sathosa Motors · Ladder Inspection Admin';
   }
+
+  const icon = document.getElementById('topbarIcon');
+  if (icon) {
+    icon.textContent = window.adminMode === 'fire' ? '🧯' : '🪜';
+  }
+  
+  const thLocation = document.getElementById('thLocation');
+  const thType = document.getElementById('thType');
+  if (thLocation) thLocation.textContent = window.adminMode === 'fire' ? 'Point No / Location' : 'Ladder No / Location';
+  if (thType) thType.textContent = window.adminMode === 'fire' ? 'Type / Qty' : 'Type / Height';
+  
   hide(q('loginView'));
   const m = q('modeSelectView'); if (m) hide(m);
   show(q('appView'));
@@ -127,6 +138,27 @@ q('loginForm').addEventListener('submit', async e => {
 q('homeBtn')?.addEventListener('click', () => {
   showModeSelect();
 });
+
+q('themeToggleBtn')?.addEventListener('click', () => {
+  const currentTheme = document.documentElement.getAttribute('data-theme');
+  const btn = q('themeToggleBtn');
+  if (currentTheme === 'dark') {
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('theme', 'light');
+    if(btn) btn.textContent = '🌙';
+  } else {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    localStorage.setItem('theme', 'dark');
+    if(btn) btn.textContent = '☀️';
+  }
+});
+
+// Load theme on startup
+if (localStorage.getItem('theme') === 'dark') {
+  document.documentElement.setAttribute('data-theme', 'dark');
+  const btn = q('themeToggleBtn');
+  if (btn) btn.textContent = '☀️';
+}
 
 q('logoutBtn').addEventListener('click', async () => {
   try { await api('POST', '/logout'); } catch {}
