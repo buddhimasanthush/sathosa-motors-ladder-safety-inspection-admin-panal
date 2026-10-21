@@ -99,18 +99,19 @@ function showApp(mode) {
   }
   const sub = document.querySelector('.topbar-brand .sub');
   if (sub) {
-    sub.textContent = window.adminMode === 'fire' ? 'Sathosa Motors · Fire Extinguisher Admin' : 'Sathosa Motors · Ladder Inspection Admin';
+    sub.textContent = window.adminMode === 'fire' ? 'Sathosa Motors · Fire Extinguisher Admin' : window.adminMode === 'firstaid' ? 'Sathosa Motors · First Aid Box Admin' : 'Sathosa Motors · Ladder Inspection Admin';
   }
 
   const icon = document.getElementById('topbarIcon');
   if (icon) {
-    icon.textContent = window.adminMode === 'fire' ? '🧯' : '🪜';
+    icon.textContent = window.adminMode === 'fire' ? '🧯' : window.adminMode === 'firstaid' ? '🩹' : '🪜';
   }
   
   const thLocation = document.getElementById('thLocation');
   const thType = document.getElementById('thType');
-  if (thLocation) thLocation.textContent = window.adminMode === 'fire' ? 'Point No / Location' : 'Ladder No / Location';
-  if (thType) thType.textContent = window.adminMode === 'fire' ? 'Type / Qty' : 'Type / Height';
+  if (thLocation) thLocation.textContent = window.adminMode === 'fire' ? 'Point No / Location' : window.adminMode === 'firstaid' ? 'Box No / Location' : 'Ladder No / Location';
+  if (thType) thType.textContent = window.adminMode === 'fire' ? 'Type / Qty' : window.adminMode === 'firstaid' ? 'Status' : 'Type / Height';
+  if (q('filterLadder')) q('filterLadder').placeholder = window.adminMode === 'fire' ? 'Point No / Location' : window.adminMode === 'firstaid' ? 'Box No / Location' : 'Ladder / equipment';
   
   hide(q('loginView'));
   const m = q('modeSelectView'); if (m) hide(m);
@@ -633,7 +634,7 @@ checkSession();
 
 window.printRecord = async function(id) {
   try {
-    const answers = await api('GET', '/inspections/' + id);
+    const answers = await api('GET', '/inspections/' + id + '?mode=' + (window.adminMode || 'ladder'));
     const r = window.currentRecords ? window.currentRecords.find(rec => rec.id === id) : null;
     
     let content = '<div style="font-family: sans-serif; padding: 30px; color: #000; background: #fff; max-width: 900px; margin: 0 auto;">';
@@ -690,3 +691,4 @@ window.printRecord = async function(id) {
 /* ── Mode Selection Buttons ── */
 if (q('btnModeLadder')) q('btnModeLadder').addEventListener('click', () => showApp('ladder'));
 if (q('btnModeFire')) q('btnModeFire').addEventListener('click', () => showApp('fire'));
+if (q('btnModeFirstAid')) q('btnModeFirstAid').addEventListener('click', () => showApp('firstaid'));
