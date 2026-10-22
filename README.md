@@ -1,28 +1,27 @@
-﻿# Safety Inspection Admin - Windows Desktop Installer
+# Safety Inspection Admin - Windows Desktop Installer
 
-This branch contains the standalone Windows installer:
+This branch contains the standalone native .NET Windows Desktop application installer:
 
-- **Safety-Inspection-Admin-Setup.zip**: Contains **Safety Inspection Admin Setup 1.0.0.exe**.
-
----
-
-### How to Install
-1. Download and extract **Safety-Inspection-Admin-Setup.zip**.
-2. Run **Safety Inspection Admin Setup 1.0.0.exe** to install and open the desktop application.
-   - It will automatically create desktop and start menu shortcuts.
+- **SafetyInspectionAdmin-Setup.exe**: Standalone Windows Installer (~25.3 MB).
+- **Safety-Inspection-Admin-Setup.zip**: Zip archive containing the installer.
 
 ---
 
-### How to Uninstall
+### What's New in this Version:
+- **Native .NET Desktop Experience:** Runs inside a dedicated Windows Forms window (powered by Microsoft WebView2).
+- **No Browser Tabs:** Does not open in Chrome or Edge browser tabs.
+- **No Console Window:** The backend service runs completely hidden in the background.
+- **Fixed Preview:** Questionnaire preview now fully supports Ladder, Fire Extinguisher, and First Aid modules.
+- **Oldest-First Date Sorting:** Inspection records are sorted chronologically from oldest to newest.
 
-#### Method 1: Via Windows Settings / Control Panel (Recommended)
-1. Open **Windows Settings** (Win + I) -> **Apps** -> **Installed Apps** (or **Add or remove programs**).
-2. Search for **Safety Inspection Admin**.
-3. Click the three dots (or select it) and click **Uninstall**.
+---
 
-#### Method 2: Via Command Prompt / PowerShell
-Run the uninstaller silently or interactively using the installed uninstaller:
-`powershell
-& "\C:\Users\buddhimas\AppData\Local\Programs\safety-inspection-admin\Uninstall Safety Inspection Admin.exe"
-`
-*(Or add /S at the end to run it completely silently without prompts)*
+### How to Install:
+1. Run **SafetyInspectionAdmin-Setup.exe** (or extract from the zip).
+2. Follow the setup wizard.
+3. Launch from the desktop shortcut or Start Menu.
+
+---
+
+### How to Uninstall:
+Open **Windows Settings** -> **Apps** -> **Installed Apps** -> Search **Safety Inspection Admin** -> Click **Uninstall**.
