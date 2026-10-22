@@ -298,7 +298,7 @@ app.get('/api/inspections', requireAdmin, async (req, res, next) => {
         left join ${t.results} r on r.inspection_id = i.id
         ${where}
        group by i.id
-       order by i.inspection_date desc, i.created_at desc
+       order by i.inspection_date asc, i.created_at asc
        limit 500
     `, values);
     res.json(rows);
@@ -382,7 +382,7 @@ app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
           from firstaid_inspections i
           left join firstaid_inspection_results r on r.inspection_id = i.id
           ${where}
-         order by i.inspection_date desc, i.created_at desc, r.display_order_snapshot asc
+         order by i.inspection_date asc, i.created_at asc, r.display_order_snapshot asc
       `, values);
 
       const inspectionsMap = new Map();
@@ -492,11 +492,11 @@ app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
     if (mode === 'fire') {
       const filters = [];
       const values = [];
-      if (req.query.from) { values.push(req.query.from); filters.push(`i.inspection_date >= $${values.length}`); }
-      if (req.query.to) { values.push(req.query.to); filters.push(`i.inspection_date <= $${values.length}`); }
-      if (req.query.ladder) { values.push(`%${req.query.ladder}%`); filters.push(`(i.point_no ilike $${values.length} or i.location ilike $${values.length})`); }
-      if (req.query.inspector) { values.push(`%${req.query.inspector}%`); filters.push(`i.inspector_name ilike $${values.length}`); }
-      if (req.query.status) { values.push(req.query.status); filters.push(`i.overall_result = $${values.length}`); }
+      if (req.query.from) { values.push(req.query.from); filters.push(`i.inspection_date >= ${values.length}`); }
+      if (req.query.to) { values.push(req.query.to); filters.push(`i.inspection_date <= ${values.length}`); }
+      if (req.query.ladder) { values.push(`%${req.query.ladder}%`); filters.push(`(i.point_no ilike ${values.length} or i.location ilike ${values.length})`); }
+      if (req.query.inspector) { values.push(`%${req.query.inspector}%`); filters.push(`i.inspector_name ilike ${values.length}`); }
+      if (req.query.status) { values.push(req.query.status); filters.push(`i.overall_result = ${values.length}`); }
       const where = filters.length ? `where ${filters.join(' and ')}` : '';
 
       const { rows } = await pool.query(`
@@ -515,11 +515,12 @@ app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
                r.display_order_snapshot as question_number,
                r.question_text_snapshot as question,
                r.result as answer,
+               coalesce(r.answer_label, r.result) as answer_label,
                r.remarks as answer_remarks
           from fire_inspections i
           left join fire_inspection_results r on r.inspection_id = i.id
           ${where}
-         order by i.inspection_date desc, i.created_at desc, r.display_order_snapshot asc
+         order by i.inspection_date asc, i.created_at asc, r.display_order_snapshot asc
       `, values);
 
       const inspectionsMap = new Map();
@@ -530,28 +531,138 @@ app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
             'Date': r.inspection_date ? r.inspection_date.toISOString().split('T')[0] : '',
             'Point No.': r.point_no,
             'Location': r.location,
-            'Extinguisher Type': r.extinguisher_type,
+            'Type': r.extinguisher_type,
             'Quantity': r.quantity,
-            'Pressure / Weight': r.pressure_weight || '',
+            'Pressure/Weight': r.pressure_weight || '',
             'Inspector Name': r.inspector_name,
             'EPF Number': r.epf_number || '',
             'Overall Result': r.overall_result,
-            'Overall Remarks': r.overall_remarks || ''
+            'Overall Remarks': r.overall_remarks || '',
+            item_remarks: []
           });
         }
         if (r.question) {
           const rec = inspectionsMap.get(r.inspection_id);
-          rec[r.question] = r.answer;
+          const cleanQ = r.question.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+          rec[cleanQ] = r.answer_label || r.answer;
           if (r.answer_remarks && r.answer_remarks.trim()) {
-            rec[`${r.question} (Remarks)`] = r.answer_remarks.trim();
+            rec.item_remarks.push(`${r.question}: ${r.answer_remarks.trim()}`);
           }
         }
       });
 
       const finalRows = Array.from(inspectionsMap.values());
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(finalRows.length ? finalRows : [{ note: 'No records found' }]), 'Fire Inspections');
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      let buffer;
+      try {
+        let templatePath = path.join(__dirname, 'fire_extinguisher_template.xlsx');
+        if (!fs.existsSync(templatePath)) {
+          templatePath = path.join(__dirname, 'Fire Extinguisher Inspection Record Sheet.xlsx');
+        }
+
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(templatePath);
+        const sheet = workbook.getWorksheet(1);
+
+        const headerRow9 = sheet.getRow(9);
+        const headers = [];
+        headerRow9.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          headers[colNumber] = cell.value ? String(cell.value).trim() : '';
+        });
+
+        const styleRow = sheet.getRow(10);
+
+        // Clear any pre-existing sample or template rows from row 10 downwards
+        for (let r = 10; r <= sheet.rowCount; r++) {
+          const er = sheet.getRow(r);
+          for (let c = 1; c <= 19; c++) {
+            er.getCell(c).value = null;
+          }
+          er.commit();
+        }
+
+        finalRows.forEach((row, rowIndex) => {
+          const excelRowNumber = 10 + rowIndex;
+          const excelRow = sheet.getRow(excelRowNumber);
+          excelRow.height = 30;
+
+          for (let c = 1; c <= 19; c++) {
+            const targetCell = excelRow.getCell(c);
+            if (styleRow.getCell(c).style) {
+              targetCell.style = Object.assign({}, styleRow.getCell(c).style);
+            }
+            targetCell.border = {
+              top: { style: 'thin' },
+              left: { style: 'thin' },
+              bottom: { style: 'thin' },
+              right: { style: 'thin' }
+            };
+            targetCell.font = { name: 'Calibri', size: 11 };
+            targetCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+          }
+
+          excelRow.getCell(1).value = row['Inspection ID'] || '';
+          excelRow.getCell(2).value = row['Date'] || '';
+          excelRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+          excelRow.getCell(3).value = row['Inspector Name'] || '';
+          excelRow.getCell(4).value = row['EPF Number'] || '';
+          excelRow.getCell(5).value = row['Location'] || '';
+          excelRow.getCell(6).value = row['Point No.'] || '';
+          excelRow.getCell(7).value = row['Type'] || '';
+          excelRow.getCell(8).value = row['Quantity'] || '';
+          excelRow.getCell(8).alignment = { horizontal: 'center', vertical: 'middle' };
+          excelRow.getCell(9).value = row['Pressure/Weight'] || '';
+          excelRow.getCell(9).alignment = { horizontal: 'center', vertical: 'middle' };
+
+          // Checklist questions from column 10 to 17
+          for (let c = 10; c <= 17; c++) {
+            const h = headers[c];
+            if (!h) continue;
+            const cleanH = h.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+            let matchedVal = '';
+            for (const [key, val] of Object.entries(row)) {
+              if (key.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim().toLowerCase() === cleanH) {
+                matchedVal = val;
+                break;
+              }
+            }
+            const qCell = excelRow.getCell(c);
+            qCell.value = matchedVal || '';
+            qCell.alignment = { horizontal: 'center', vertical: 'middle' };
+            if (matchedVal === 'FAIL') {
+              qCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFF0000' } };
+            } else if (matchedVal === 'PASS') {
+              qCell.font = { name: 'Calibri', size: 11, color: { argb: 'FF008000' } };
+            }
+          }
+
+          // Overall Result in col 18
+          const resultCell = excelRow.getCell(18);
+          resultCell.value = row['Overall Result'] || '';
+          resultCell.alignment = { horizontal: 'center', vertical: 'middle' };
+          if (row['Overall Result'] === 'FAIL') {
+            resultCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFF0000' } };
+          } else if (row['Overall Result'] === 'PASS') {
+            resultCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF008000' } };
+          }
+
+          // Overall Remarks in col 19
+          const remarkParts = [];
+          if (row['Overall Remarks']) remarkParts.push(row['Overall Remarks']);
+          if (row.item_remarks && row.item_remarks.length) {
+            remarkParts.push(...row.item_remarks);
+          }
+          excelRow.getCell(19).value = remarkParts.join('; ');
+
+          excelRow.commit();
+        });
+
+        buffer = await workbook.xlsx.writeBuffer();
+      } catch (tmplErr) {
+        console.error('Fire extinguisher template export fallback:', tmplErr);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(finalRows.length ? finalRows : [{ note: 'No records found' }]), 'Fire Inspections');
+        buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      }
 
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="FIRE-EXTINGUISHER-CHECKLIST-EXPORT.xlsx"');
@@ -589,7 +700,7 @@ app.get('/api/export/inspections', requireAdmin, async (req, res, next) => {
         from inspections i
         left join inspection_results r on r.inspection_id = i.id
         ${where}
-       order by i.inspection_date desc, i.created_at desc, r.display_order_snapshot asc
+       order by i.inspection_date asc, i.created_at asc, r.display_order_snapshot asc
     `, values);
 
     const inspectionsMap = new Map();

@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "build:exe": "node build_exe.mjs",
+    "build:installer": "node build_installer.mjs"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
@@ -15,5 +17,8 @@
     "multer": "^2.0.2",
     "pg": "^8.16.3",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "innosetup-compiler": "^6.3.1"
   }
 }

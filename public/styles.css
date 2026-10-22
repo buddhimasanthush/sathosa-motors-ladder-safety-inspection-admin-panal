@@ -533,6 +533,31 @@ tbody td {
   margin-top: 2px;
 }
 
+.preview-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.preview-option-pill {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  letter-spacing: 0.02em;
+  display: inline-block;
+}
+
+.preview-option-pill.pill-fail {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: var(--fail);
+  background: var(--fail-bg);
+}
+
 /* ─── Excel Section ──────────────────────────────────────── */
 .excel-grid {
   display: grid;

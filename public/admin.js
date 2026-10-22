@@ -41,9 +41,23 @@ function showErrorModal(msg) {
 }
 
 function sectionBadge(s) {
-  const cls = { general: 'badge-section-general', extension: 'badge-section-extension', step: 'badge-section-step', fire_extinguisher: 'badge-section-general' };
-  const lbl = { general: 'General', extension: 'Extension', step: 'Step', fire_extinguisher: 'Fire Ext.' };
-  return `<span class="badge ${cls[s] || 'badge-inactive'}">${lbl[s] || s}</span>`;
+  const cls = {
+    general: 'badge-section-general',
+    extension: 'badge-section-extension',
+    step: 'badge-section-step',
+    fire: 'badge-section-general',
+    fire_extinguisher: 'badge-section-general',
+    firstaid: 'badge-section-general'
+  };
+  const lbl = {
+    general: 'General',
+    extension: 'Extension',
+    step: 'Step',
+    fire: 'Fire Ext.',
+    fire_extinguisher: 'Fire Ext.',
+    firstaid: 'First Aid'
+  };
+  return `<span class="badge ${cls[s] || 'badge-section-general'}">${lbl[s] || s}</span>`;
 }
 
 function typeBadge(t) {
@@ -113,6 +127,21 @@ function showApp(mode) {
   if (thType) thType.textContent = window.adminMode === 'fire' ? 'Type / Qty' : window.adminMode === 'firstaid' ? 'Status' : 'Type / Height';
   if (q('filterLadder')) q('filterLadder').placeholder = window.adminMode === 'fire' ? 'Point No / Location' : window.adminMode === 'firstaid' ? 'Box No / Location' : 'Ladder / equipment';
   
+  const catSelect = q('category');
+  if (catSelect) {
+    if (window.adminMode === 'fire') {
+      catSelect.innerHTML = '<option value="fire">🧯 Fire Extinguisher</option>';
+    } else if (window.adminMode === 'firstaid') {
+      catSelect.innerHTML = '<option value="firstaid">🩹 First Aid Box</option>';
+    } else {
+      catSelect.innerHTML = `
+        <option value="general">🔧 General</option>
+        <option value="extension">🔄 Extension</option>
+        <option value="step">🪜 Step</option>
+      `;
+    }
+  }
+
   hide(q('loginView'));
   const m = q('modeSelectView'); if (m) hide(m);
   show(q('appView'));
@@ -241,7 +270,7 @@ function resetForm() {
   if (q('editorTitle')) q('editorTitle').textContent = 'Add Question';
   q('questionId').value = '';
   q('questionText').value = '';
-  q('category').value = 'general';
+  q('category').value = window.adminMode === 'fire' ? 'fire' : window.adminMode === 'firstaid' ? 'firstaid' : 'general';
   q('questionType').value = 'decision';
   q('sortOrder').value = (Math.max(0, ...questions.map(x => x.display_order)) + 1) || 1;
   q('required').checked = true;
@@ -418,37 +447,99 @@ q('questionForm').addEventListener('submit', async e => {
    ═══════════════════════════════════════════════════════════ */
 function renderPreview() {
   const container = q('previewList');
-  if (!questions.length) {
+  if (!container) return;
+  if (!questions || !questions.length) {
     container.innerHTML = '<p style="color:var(--text-3);padding:24px;">No questions found.</p>';
     return;
   }
 
-  const sections = window.adminMode === 'fire' ? [
-    { key: 'general',           label: '🔧 General Inspection Points', icon: '🔧' },
-    { key: 'fire_extinguisher', label: '🧯 Fire Extinguisher Specific', icon: '🧯' }
-  ] : [
-    { key: 'general',   label: '🔧 General Inspection Points', icon: '🔧' },
-    { key: 'extension', label: '🔄 Extension Ladder Specific', icon: '🔄' },
-    { key: 'step',      label: '🪜 Step Ladder Specific',      icon: '🪜' },
-  ];
+  let sections = [];
+  if (window.adminMode === 'fire') {
+    sections = [
+      {
+        key: 'fire',
+        match: cat => cat === 'fire' || cat === 'fire_extinguisher' || cat === 'general',
+        label: '🧯 Fire Extinguisher Inspection Checklist',
+        icon: '🧯'
+      }
+    ];
+  } else if (window.adminMode === 'firstaid') {
+    sections = [
+      {
+        key: 'firstaid',
+        match: cat => cat === 'firstaid' || cat === 'general',
+        label: '🩹 First Aid Box Inspection Checklist',
+        icon: '🩹'
+      }
+    ];
+  } else {
+    sections = [
+      { key: 'general', match: cat => cat === 'general', label: '🔧 General Inspection Points', icon: '🔧' },
+      { key: 'extension', match: cat => cat === 'extension', label: '🔄 Extension Ladder Specific', icon: '🔄' },
+      { key: 'step', match: cat => cat === 'step', label: '🪜 Step Ladder Specific', icon: '🪜' }
+    ];
+  }
 
-  container.innerHTML = sections.map(sec => {
-    const items = questions.filter(x => x.category === sec.key);
-    if (!items.length) return '';
-    return `
+  const renderedIds = new Set();
+  let html = '';
+
+  for (const sec of sections) {
+    const items = questions.filter(x => sec.match ? sec.match(x.category) : x.category === sec.key);
+    if (!items.length) continue;
+    items.forEach(x => renderedIds.add(x.id));
+
+    html += `
       <div class="preview-section fade-in">
-        <div class="preview-section-title">${sec.label} <span style="margin-left:auto;font-size:0.75rem;opacity:0.7;">${items.length} questions</span></div>
-        ${items.map((item, i) => `
-          <div class="preview-question ${item.is_active ? '' : 'inactive'}" style="${item.is_active ? '' : 'opacity:0.6;'}">
-            <span class="preview-num">#${item.display_order}</span>
-            <span class="preview-text">${esc(item.question)}${item.is_required ? ' <span style="color:var(--fail);font-size:0.85em;">*</span>' : ''}</span>
-            <span class="preview-type-badge">${typeBadge(item.question_type)}</span>
-            ${!item.is_active ? '<span class="badge badge-inactive" style="margin-left:8px;">Inactive</span>' : '<span class="badge badge-active" style="margin-left:8px;">Active</span>'}
-          </div>
-        `).join('')}
+        <div class="preview-section-title">
+          <span>${sec.label}</span>
+          <span style="margin-left:auto;font-size:0.75rem;opacity:0.8;font-weight:normal;">${items.length} questions</span>
+        </div>
+        ${items.map(item => renderPreviewQuestion(item)).join('')}
       </div>
     `;
-  }).join('');
+  }
+
+  const remaining = questions.filter(x => !renderedIds.has(x.id));
+  if (remaining.length > 0) {
+    html += `
+      <div class="preview-section fade-in">
+        <div class="preview-section-title">
+          <span>📋 Additional Inspection Points</span>
+          <span style="margin-left:auto;font-size:0.75rem;opacity:0.8;font-weight:normal;">${remaining.length} questions</span>
+        </div>
+        ${remaining.map(item => renderPreviewQuestion(item)).join('')}
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
+}
+
+function renderPreviewQuestion(item) {
+  const optionsHtml = item.options && item.options.length ? `
+    <div class="preview-options">
+      ${item.options.map(opt => `
+        <span class="preview-option-pill ${opt.is_fail_value ? 'pill-fail' : ''}">${esc(opt.option_label)}</span>
+      `).join('')}
+    </div>
+  ` : '';
+
+  return `
+    <div class="preview-question ${item.is_active ? '' : 'inactive'}" style="${item.is_active ? '' : 'opacity:0.6;'}">
+      <span class="preview-num">#${item.display_order}</span>
+      <div style="flex:1;">
+        <div class="preview-text">
+          ${esc(item.question)}
+          ${item.is_required ? ' <span style="color:var(--fail);font-size:0.85em;font-weight:bold;">*</span>' : ''}
+        </div>
+        ${optionsHtml}
+      </div>
+      <span class="preview-type-badge">${typeBadge(item.question_type)}</span>
+      ${!item.is_active 
+        ? '<span class="badge badge-inactive" style="margin-left:8px;">Inactive</span>' 
+        : '<span class="badge badge-active" style="margin-left:8px;">Active</span>'}
+    </div>
+  `;
 }
 
 
